@@ -67,7 +67,8 @@ export function hasUserRpc(): boolean {
 // ── Request level: how much optional data the app loads/polls ───────────────
 //   mvr    = minimum viable requests: SNG tiers + jackpot + balance only
 //   higher = + footer prices, claimable totals, supply/pool stats, my-tables
-//   full   = + cash/watch table enumeration (getProgramAccounts; needs good RPC)
+//   full   = + cash/watch table enumeration. Node FULL uses the table-list
+//            route/indexer first; static/browser fallback may need good RPC.
 export type RequestLevel = 'mvr' | 'higher' | 'full';
 const LEVEL_KEY = 'fp.requestLevel';
 const LEVEL_ORDER: Record<RequestLevel, number> = { mvr: 0, higher: 1, full: 2 };

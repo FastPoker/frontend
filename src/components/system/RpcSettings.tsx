@@ -12,12 +12,13 @@ import { getUserRpcUrl, getUserWsUrl, setUserRpc, clearUserRpc, getRequestLevel,
 import { getRpcMeter, subscribeRpcMeter, resetRpcMeter, type RpcMeterSnapshot } from '@/lib/rpc-meter';
 
 // Two real tiers. Everything cheap (SNG tiers, jackpot, prices, supply/burn
-// stats, claimable, your seated tables) loads at Minimal — single-account /
-// chunked reads, slow-polled, so the free pool serves it. Full adds the only
-// thing the free pool WAF-blocks: cash + watch discovery (getProgramAccounts).
+// stats, claimable, your seated tables) loads at Minimal - single-account /
+// chunked reads, slow-polled, so the free pool serves it. Full adds global
+// cash + watch discovery through the node route/indexer first, with direct RPC
+// scans as the browser/static fallback.
 const LEVELS: { id: RequestLevel; label: string; blurb: string }[] = [
-  { id: 'mvr', label: 'Minimal', blurb: 'SNG tiers, jackpot, prices, supply/burn stats & claimable — slow-polled. Works on the free pool.' },
-  { id: 'full', label: 'Full', blurb: 'Adds cash + watch table discovery (getProgramAccounts). The free pool blocks it — needs your own RPC.' },
+  { id: 'mvr', label: 'Minimal', blurb: 'SNG tiers, jackpot, prices, supply/burn stats & claimable - slow-polled. Works on the free pool.' },
+  { id: 'full', label: 'Full', blurb: 'Adds cash + watch table discovery. Node FULL uses the table-list route/indexer; static fallback may need your own RPC.' },
 ];
 
 type ProviderId = 'site' | 'pool' | 'helius' | 'quicknode' | 'custom';

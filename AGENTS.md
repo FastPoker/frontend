@@ -43,6 +43,10 @@ npm ci
 npm run start
 ```
 
+Wire the indexer by URL, not by folder assumptions. `INDEXER_BASE_URL` powers
+server-side table lists/history; `NEXT_PUBLIC_INDEXER_WS_URL` is optional browser
+live push and must be set before building if used.
+
 ## Rules For Changes
 
 - Keep static LIGHT free of server-route requirements. Static export must not depend

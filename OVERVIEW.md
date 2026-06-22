@@ -62,8 +62,9 @@ Browser
 - **Player actions:** wallet-signed in every profile.
 - **Relay-assisted protocol work:** available in node/FULL source mode; static LIGHT
   needs an external crank/dealer/relay network for the same helper work.
-- **Discovery:** global table listing needs `getProgramAccounts`; free RPC providers
-  often block it. Bring a capable RPC or run the indexer.
+- **Discovery:** global table listing needs either the node table-list route with
+  indexer/server RPC support or direct browser `getProgramAccounts`; free RPC
+  providers often block the direct browser fallback.
 - **History/stats:** require the optional indexer.
 - **Real-time:** client polling works everywhere; indexer adds WebSocket push.
 
@@ -112,8 +113,9 @@ npm ci && npm run start   # from the Indexer package directory
 
 The indexer needs MongoDB, a keyed mainnet RPC, and Helius LaserStream for live
 production-quality updates. It listens on `INDEXER_PORT` (default 3001); point the
-web app's `INDEXER_BASE_URL` (server) and `NEXT_PUBLIC_INDEXER_WS_URL` (browser, set
-before building) at wherever it's reachable — the on-disk layout doesn't matter.
+web app's `INDEXER_BASE_URL` (server table lists/history) and optional
+`NEXT_PUBLIC_INDEXER_WS_URL` (browser live push, set before building) at wherever
+it's reachable - the on-disk layout doesn't matter.
 
 ---
 
@@ -134,8 +136,8 @@ package has its own `.env.example`.
   `NEXT_PUBLIC_POOL_PDA`, `NEXT_PUBLIC_TREASURY`, `NEXT_PUBLIC_CRANK_PUBKEY`, and
   permission/registry/steel program ids.
 - **Privy:** `NEXT_PUBLIC_PRIVY_APP_ID`; blank means native web3 wallets only.
-- **Indexer wiring:** client root sets `INDEXER_BASE_URL` and
-  `NEXT_PUBLIC_INDEXER_WS_URL`; `Indexer` owns `HELIUS_API_KEY`,
+- **Indexer wiring:** client root sets `INDEXER_BASE_URL` for server reads and
+  optional `NEXT_PUBLIC_INDEXER_WS_URL` for browser live push; `Indexer` owns `HELIUS_API_KEY`,
   `RPC_URL`, `LASERSTREAM_ENDPOINT`, `PROGRAM_ID`, `MONGO_URI`, and `MONGO_DB`.
 - **Build mode:** `NEXT_OUTPUT=export` only for `npm run build:static`; unset for
   normal source node builds.
@@ -152,8 +154,8 @@ package has its own `.env.example`.
 | Claims/leave | yes | yes | yes | yes |
 | Cash top-up/cleanup/clear-rake | no static relay | no static relay | yes | yes |
 | SNG tier player counts | yes | yes | yes | yes |
-| Cash table discovery | limited by free RPC | yes | yes | yes |
-| My tables list | limited by free RPC | yes | yes | yes |
+| Cash table discovery | limited by free RPC | yes | yes | yes, indexer-first |
+| My tables list | limited by free RPC | yes | yes | yes, indexer-first |
 | History/leaderboards/avg pot/VPIP | no | no | no | yes |
 | Live indexed WebSocket push | no | no | no | yes |
 
@@ -200,8 +202,8 @@ operator fee; static export; MIT license and trademark docs.
 
 ## 8. Known Limitations
 
-- Free public RPC often blocks `getProgramAccounts`, so global cash table discovery
-  and my-tables can be limited on the free pool.
+- Free public RPC often blocks direct browser `getProgramAccounts`, so static
+  LIGHT global cash table discovery and my-tables can be limited on the free pool.
 - Static export excludes all route handlers. Static deployments cannot use `/api/*`
   routes or same-origin `/rpc`.
 - Process-local social storage works in node mode, but show-cards/player-notes are

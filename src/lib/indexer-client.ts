@@ -22,6 +22,13 @@ export interface TableEntry {
   account: { data: Buffer; lamports: number; owner: PublicKey };
 }
 
+interface RawIndexerTable {
+  pubkey: string;
+  owner: string;
+  dataB64: string;
+  lamports?: number;
+}
+
 /**
  * Return the pubkey list for non-closed tables known to the indexer. Use
  * `creator` or `gameType` to filter server-side. Returns null when the
@@ -85,6 +92,45 @@ export async function fetchTablesByPubkey(
     }
   }
   return { delegated, undelegated, orphan };
+}
+
+/**
+ * Fetch raw live Table accounts directly from the source indexer's push-fed table
+ * cache. This is the cheapest FULL path: no program-account scan and no follow-up
+ * getMultipleAccountsInfo. Returns null when the indexer is not configured/cold.
+ */
+export async function fetchRawTablesViaIndexer(opts: {
+  timeoutMs?: number;
+} = {}): Promise<TableEntry[] | null> {
+  if (!INDEXER_BASE_URL) return null;
+  try {
+    const res = await fetch(new URL('/v1/tables', INDEXER_BASE_URL).toString(), {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 2500),
+    });
+    if (!res.ok) return null;
+    const body = await res.json() as { tables?: RawIndexerTable[] };
+    const rows = Array.isArray(body.tables) ? body.tables : [];
+    const out: TableEntry[] = [];
+    for (const row of rows) {
+      if (!row?.pubkey || !row.owner || !row.dataB64) continue;
+      try {
+        out.push({
+          pubkey: new PublicKey(row.pubkey),
+          account: {
+            data: Buffer.from(row.dataB64, 'base64'),
+            lamports: Number(row.lamports ?? 0),
+            owner: new PublicKey(row.owner),
+          },
+        });
+      } catch {
+        // Skip malformed cache rows; the route can still fall back.
+      }
+    }
+    return out.length ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -78,6 +78,10 @@ INDEXER_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_INDEXER_WS_URL=ws://localhost:3001/ws
 ```
 
+`INDEXER_BASE_URL` powers server-side table lists/history. `NEXT_PUBLIC_INDEXER_WS_URL`
+is only for browser live push and must be set before building if you want it in
+the client bundle.
+
 The indexer is a separate package (this release ships it alongside the frontend;
 run it from wherever you keep it — the directory layout doesn't matter). In the
 indexer package, copy its env:
@@ -106,8 +110,8 @@ npm run start
 ```
 
 It listens on `INDEXER_PORT` (default 3001). Point the web app's `INDEXER_BASE_URL`
-(server-side) and `NEXT_PUBLIC_INDEXER_WS_URL` (browser) at wherever it's reachable —
-only the URLs matter, not where the indexer lives on disk.
+(server-side) and optional `NEXT_PUBLIC_INDEXER_WS_URL` (browser) at wherever it's
+reachable - only the URLs matter, not where the indexer lives on disk.
 
 Then build or restart the root web app after `NEXT_PUBLIC_INDEXER_WS_URL` is set,
 because `NEXT_PUBLIC_*` values are baked into the browser bundle at build time.

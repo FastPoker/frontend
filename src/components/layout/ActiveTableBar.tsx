@@ -14,6 +14,7 @@ import { getSngPoolPda, getSngQueueMarkerPda, buildLeaveSngPoolInstruction } fro
 import { getLatestBlockhashClient } from '@/lib/blockhash-client';
 import { confirmFundsAction } from '@/lib/funds-confirmation';
 import { useToast } from '@/components/toast/ToastProvider';
+import { levelAtLeast } from '@/lib/user-config';
 
 function sngTypeShort(name: SngPool['gameTypeName']): string {
   return name === 'heads_up' ? 'HU' : name === '6max' ? '6-Max' : '9-Max';
@@ -338,8 +339,7 @@ export function ActiveTableBar() {
     }
     let cancelled = false;
     const poll = async () => {
-      // Standalone: no /api/tables/list backend (creator cash-table tracking). Skip.
-      if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) { setUnfinished((prev) => (prev.length ? [] : prev)); return; }
+      if (!levelAtLeast('full')) { setUnfinished((prev) => (prev.length ? [] : prev)); return; }
       try {
         const res = await fetch(`/api/tables/list?creator=${wallet}&gameType=3`, { cache: 'no-store' });
         if (!res.ok) return;

@@ -51,6 +51,10 @@ npm ci
 npm run start
 ```
 
+Wire by URL, not fixed process layout: `INDEXER_BASE_URL` powers server-side
+table lists/history, and optional `NEXT_PUBLIC_INDEXER_WS_URL` powers browser
+live push if set before building.
+
 ## Configuration Rules
 
 - Blank `.env.local` is valid for MVR: mainnet, free public RPC pool, keyless TEE auth.
@@ -61,6 +65,8 @@ npm run start
   `TEE_API_KEY`, and `APP_ORIGIN`. They must never sign player wallet actions.
 - The optional indexer is read-only and needs MongoDB, a keyed RPC, and Helius
   LaserStream for production-quality live data.
+- FULL cash table listing uses `/api/tables/list`; with `INDEXER_BASE_URL` it reads
+  the indexer's raw table cache first, then falls back to direct server RPC scans.
 - `NEXT_PUBLIC_*` values are baked into the browser bundle at build time; rebuild
   after changing them.
 

@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
+import { levelAtLeast } from '@/lib/user-config';
 
 export interface MyActiveTable {
   tablePda: string;
@@ -71,24 +72,32 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
   const startedAt = Date.now();
   const mySeq = ++inflightSeq;
   const p = (async () => {
+    const publishFallback = async () => {
+      let rows: MyActiveTable[] = [];
+      try {
+        const { getMySngTablesOnChain } = await import('@/lib/api');
+        rows = await getMySngTablesOnChain(walletStr);
+      } catch {
+        // Leave empty on RPC failure.
+      }
+      if (activeWallet === walletStr && startedAt >= lastPublishedAtMs) {
+        lastPublishedAtMs = startedAt;
+        publish({ tables: rows, loaded: true, asOfMs: startedAt });
+      }
+    };
     try {
-      // Standalone: no /api/my-sng-tables backend. Detect seated SNG tables on-chain
-      // via PlayerTableMarker over the pool table slots (bounded per-wallet).
-      if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) {
-        let rows: MyActiveTable[] = [];
-        try {
-          const { getMySngTablesOnChain } = await import('@/lib/api');
-          rows = await getMySngTablesOnChain(walletStr);
-        } catch { /* leave empty on RPC failure */ }
-        if (activeWallet === walletStr && startedAt >= lastPublishedAtMs) {
-          lastPublishedAtMs = startedAt;
-          publish({ tables: rows, loaded: true, asOfMs: startedAt });
-        }
+      // LIGHT/static: no server route assumption. Detect seated SNG tables
+      // on-chain via PlayerTableMarker over the pool table slots.
+      if (!levelAtLeast('full')) {
+        await publishFallback();
         return;
       }
       const url = `/api/my-sng-tables?wallet=${encodeURIComponent(walletStr)}${force ? '&force=1' : ''}`;
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) {
+        await publishFallback();
+        return;
+      }
       const data = await res.json();
       if (activeWallet !== walletStr) return;
       const tables: MyActiveTable[] = Array.isArray(data?.tables)
@@ -100,7 +109,7 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
       lastPublishedAtMs = startedAt;
       publish({ tables, loaded: true, asOfMs: startedAt });
     } catch {
-      // Leave the last good snapshot in place on transient failures.
+      await publishFallback();
     } finally {
       // Only the latest-started fetch clears the slot, so a settling stale
       // promise can't wipe a newer in-flight one.

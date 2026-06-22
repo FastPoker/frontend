@@ -55,9 +55,10 @@ npm ci && npm run start   # from the Indexer package directory
 ```
 
 The indexer is read-only and optional. It needs MongoDB, a keyed mainnet RPC, and
-Helius LaserStream for production-quality live data. Wire it by URL only: set the
-web app's `INDEXER_BASE_URL` (server) + `NEXT_PUBLIC_INDEXER_WS_URL` (browser, before
-building) at wherever the indexer listens (`INDEXER_PORT`, default 3001).
+Helius LaserStream for production-quality live data. Wire it by URL only:
+`INDEXER_BASE_URL` powers server-side table lists/history, and optional
+`NEXT_PUBLIC_INDEXER_WS_URL` powers browser live push if set before building.
+Point those URLs at wherever the indexer listens (`INDEXER_PORT`, default 3001).
 
 ## Validation
 

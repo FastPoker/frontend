@@ -398,10 +398,6 @@ function ModeTabs({
             WATCH LIVE
           </button>
         )}
-        {/* CREATE TABLE — hosted build only. The standalone has no
-            /my-tables/create page yet (cash creation is deferred), so showing
-            the link would just 404. */}
-        {process.env.NEXT_PUBLIC_INDEXER_WS_URL && (
         <Link
           href="/my-tables/create"
           onMouseDown={() => SFX.play('ui-click')}
@@ -415,7 +411,6 @@ function ModeTabs({
           </svg>
           CREATE TABLE
         </Link>
-        )}
       </div>
     </div>
   );
@@ -3252,7 +3247,6 @@ function MyTablesSection({
               <p className="font-mono text-[10.5px] text-bone/75 mt-2 mx-10 leading-snug">
                 You&apos;re the house. 45% of every pot rake. SOL + $FP. 5BB cap. Auto-paid to your wallet.
               </p>
-              {process.env.NEXT_PUBLIC_INDEXER_WS_URL && (
               <Link
                 href="/my-tables/create"
                 onMouseDown={() => SFX.play('ui-click')}
@@ -3263,7 +3257,6 @@ function MyTablesSection({
                 </svg>
                 CREATE TABLE
               </Link>
-              )}
             </div>
           </div>
         </div>
@@ -3490,12 +3483,11 @@ export function Lobby(props: LobbyProps) {
   }, [myActiveTables.tables, clientGames]);
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Standalone MVP is SNG-only; always land on the SNG tab regardless of stale
-  // localStorage / ?tab= deep-links to the removed cash/my surfaces.
+  const fullRequestMode = levelAtLeast('full');
   const [mode, setMode] = useState<'sng' | 'cash' | 'my' | 'spectate'>('sng');
   useEffect(() => {
     const t = searchParams.get('tab');
-    if (t === 'sng') setMode('sng');
+    if (t === 'sng' || t === 'cash' || t === 'my' || t === 'spectate') setMode(t);
   }, [searchParams]);
 
   const [cashTables, setCashTables] = useState<CashTable[]>([]);
@@ -3523,8 +3515,7 @@ export function Lobby(props: LobbyProps) {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      // Standalone: no /api/tables/list backend (cash registry summary). Skip.
-      if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) { setSummaryLoaded(true); return; }
+      if (!fullRequestMode) { setSummaryLoaded(true); return; }
       try {
         const r = await fetch('/api/tables/list?limit=300');
         if (!r.ok) return;
@@ -3562,7 +3553,7 @@ export function Lobby(props: LobbyProps) {
     load();
     const id = setInterval(load, 10000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  }, [fullRequestMode]);
   const [myOnChainSngTables, setMyOnChainSngTables] = useState<{ tablePda: string; type: 'heads_up' | '6max' | '9max'; tier: number }[]>([]);
   const [myOnChainTablesLoaded, setMyOnChainTablesLoaded] = useState(false);
 
@@ -3641,13 +3632,7 @@ export function Lobby(props: LobbyProps) {
     let cancelled = false;
     const PHASE_NAMES = ['Waiting', 'Starting', 'Preflop', 'Flop', 'Turn', 'River', 'Showdown', 'Complete'];
     const fetchCreator = async () => {
-      // Standalone: no /api/tables/list backend. Discover the cash tables this
-      // wallet CREATED on-chain (Table.creator @290) across the poker program
-      // AND the delegation program — in-play tables are delegated, so they only
-      // show up under the delegation program. Matches the original design where
-      // My Tables lists the tables you host. Needs a gPA-capable RPC; on the
-      // free pool getProgramAccounts throws and we simply show none.
-      if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) {
+      if (!fullRequestMode) {
         setCreatorLoading(true);
         try {
           const me = publicKey.toBase58();
@@ -3729,7 +3714,7 @@ export function Lobby(props: LobbyProps) {
     fetchCreator();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicKey, mode]);
+  }, [publicKey, mode, fullRequestMode]);
 
   // Fetch cash tables when on cash tab. Uses a self-scheduling loop instead
   // of setInterval so we can stay tight (~2s) until the backend cache warms
@@ -3738,10 +3723,7 @@ export function Lobby(props: LobbyProps) {
   // state until the user toggled away and back.
   useEffect(() => {
     if (mode !== 'cash') return;
-    // Standalone: no /api/tables/list backend. The cash tab renders the
-    // search-by-address + your-saved-tables view (CashStandalone) instead of a
-    // server-enumerated list, so skip the dead fetch (it would just 404-loop).
-    if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) return;
+    if (!fullRequestMode) return;
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -3779,7 +3761,7 @@ export function Lobby(props: LobbyProps) {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [mode]);
+  }, [mode, fullRequestMode]);
 
   const loadMoreCashTables = useCallback(async () => {
     if (!cashNextCursor || cashLoadingMore) return;
@@ -3928,9 +3910,7 @@ export function Lobby(props: LobbyProps) {
   const queuedPlayers = (sngPools ?? []).reduce((sum, p) => sum + (p.queueCount || p.waitingCount || 0), 0);
   const totalPlayersHere = tableSummary.players + queuedPlayers;
   const sngStats = `${tableSummary.sng} tables · ${tableSummary.sngActive} active`;
-  // Standalone doesn't enumerate cash tables (no backend); the tab is search +
-  // your saved tables, so a server "N tables" count would be a misleading 0.
-  const cashStats = process.env.NEXT_PUBLIC_INDEXER_WS_URL
+  const cashStats = fullRequestMode
     ? `${tableSummary.cash} tables · ${tableSummary.cashActive} active`
     : 'search & saved';
   const sngTotals = `${tableSummary.sng} SNG tables`;
@@ -3939,8 +3919,14 @@ export function Lobby(props: LobbyProps) {
   const myCount = creatorTables.length;
   const myStats = `${myCount} ${myCount === 1 ? 'table' : 'tables'}`;
 
-  // Seated PDAs for cash filter (placeholder · INDEXER: per-wallet seating map)
-  const seatedPdas = useMemo(() => new Set<string>(), []);
+  const seatedPdas = useMemo(
+    () => new Set(
+      playingNowTables
+        .filter((table) => table.type === 'cash')
+        .map((table) => table.tablePda),
+    ),
+    [playingNowTables],
+  );
 
   return (
     <div id="lobby-shell" className="fp-lobby-shell space-y-3">
@@ -4052,8 +4038,20 @@ export function Lobby(props: LobbyProps) {
       })()}
 
       {/* ─── Cash Section ─── */}
-      {mode === 'cash' && (
+      {mode === 'cash' && !fullRequestMode && (
         <CashStandalone myWallet={publicKey?.toBase58() ?? null} />
+      )}
+      {mode === 'cash' && fullRequestMode && (
+        <CashSection
+          tables={cashTables}
+          loading={cashLoading}
+          onNavigate={onResumeGame}
+          onSpectate={(pda) => router.push(`/game?table=${pda}&spectate=1`)}
+          seatedPdas={seatedPdas}
+          hasMore={!!cashNextCursor}
+          loadingMore={cashLoadingMore}
+          onLoadMore={loadMoreCashTables}
+        />
       )}
 
       {/* ─── My Tables Section — your seated SNG tables (on at Minimal) ─── */}

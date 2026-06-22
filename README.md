@@ -80,8 +80,8 @@ See `.env.example` for the common LIGHT and node-server settings:
   required only for node relay routes.
 
 For the optional source indexer, run the separate `Indexer` package
-(wherever you keep it). The client only needs `INDEXER_BASE_URL` and
-`NEXT_PUBLIC_INDEXER_WS_URL` pointed at it.
+(wherever you keep it). The client needs `INDEXER_BASE_URL` for server-side table
+lists/history and `NEXT_PUBLIC_INDEXER_WS_URL` only for browser WebSocket push.
 
 ## Static LIGHT build
 
@@ -90,9 +90,10 @@ npm run build:static
 ```
 
 Upload `out/` anywhere. The static build has no route handlers, so it cannot use
-`/api/indexer`, `/rpc`, or cash/SNG relay APIs. Users can still provide a capable
-RPC endpoint in-app for table discovery, and the app can point at an externally
-run indexer WebSocket if you set `NEXT_PUBLIC_INDEXER_WS_URL` at build time.
+`/api/indexer`, `/rpc`, `/api/tables/list`, `/api/my-sng-tables`, or cash/SNG relay APIs. Users can
+still provide a capable RPC endpoint in-app for table discovery, and the app can
+point at an externally run indexer WebSocket if you set `NEXT_PUBLIC_INDEXER_WS_URL`
+at build time.
 
 ## Source FULL mode
 
@@ -111,7 +112,12 @@ The one wiring rule:
 - `INDEXER_BASE_URL` is server-side and should point from the web process to the
   indexer, for example `http://localhost:3001`.
 - `NEXT_PUBLIC_INDEXER_WS_URL` is baked into the browser bundle at build time and
-  must be reachable by the end user's browser, for example `wss://your.domain/ws`.
+  must be reachable by the end user's browser for live push, for example
+  `wss://your.domain/ws`.
+
+Cash table listing in FULL mode uses the web app's `/api/tables/list` route. That
+route reads the indexer's raw table cache first when `INDEXER_BASE_URL` is set,
+then falls back to direct RPC scans when a server RPC is configured.
 
 ## Release hygiene
 

@@ -6,9 +6,9 @@ import { createBreaker, fetchWithTimeout, type BreakerState } from '@/lib/circui
  * Indexer service (default port 3001). Keeps the browser talking to
  * the same origin (no CORS).
  *
- * LIGHT mode (the default, no backend) never reaches this route: every hook that
- * fetches `/api/indexer/*` is gated on NEXT_PUBLIC_INDEXER_WS_URL and falls back
- * to direct RPC when it's unset. So in a LIGHT build this route simply sits idle.
+ * LIGHT mode (the default, no backend) does not need this route. Callers either
+ * skip indexed reads until FULL is selected or fall back to direct RPC where
+ * that is supported. So in a LIGHT node build this route simply sits idle.
  * NOTE: it must be excluded if/when the LIGHT build flips to `output: 'export'`
  * (static export forbids route handlers) — it only belongs in the node-server
  * FULL build.
