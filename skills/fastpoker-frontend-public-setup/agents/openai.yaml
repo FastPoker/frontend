@@ -1,0 +1,4 @@
+interface:
+  display_name: "FastPoker Standalone Setup"
+  short_description: "Run and publish the FastPoker standalone source release."
+  default_prompt: "Help me run or publish this FastPoker standalone source release using the MVR/LIGHT path first."

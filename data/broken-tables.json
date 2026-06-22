@@ -1,0 +1,662 @@
+[
+  {
+    "pubkey": "2XrGDAdtdNHdCmivHRsq65H6bXQGL99JjL9QMxypXjQM",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "8amXeHHrHdz75G8d3rMFJJc46pnE4DRr7nEBoA3ZywDJ",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FeLw5n1qAHHbE69BDAqc29TpsT4L4FtBbVsue25ZaVhV",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FeR58h1aBQB2Nhq9c3DkooBnBMcsoFLL4w8Nf85kqBj2",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3tWG33BUg7rrKGHcNr81ALYZtjiaMyiX1yRspVnunr7N",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6LuRu47vnVMpkwff88wPGsWTDz2X3nHKbgGNoovGcdiC",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2Wnptz29SoU2vWjPq7sETwMHqXB3Q9poVyTqu9t4r6fM",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "VUCUvDjPXKFGV1Dph7AGUc2AcA4wcK8d52shuDMZN2J",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FkLHKsF32fKnawCMzZD4qD5g9jxAr7mZm6y48Cauf7J8",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "EVHaKxmHiN5nptPcMSZfCSZRv47smYji6oM82mfn6KcW",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "ckQX8hUArBwWP78aVRyGWz7jP6v9Pu4upS7YayzgsX4",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "HquFDtWnvPRQd6DipjV7EKYnZ6e5e3zQ1d742ke8XmZQ",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6qu4cpBdEC3v9kuNnuTeoJsSwDSDzFFVhzLWiR7t81Vf",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3PuTvBA7aD6dtcmg5EGag3er5mo1WsBa8RYRCLyEvNJu",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6NnpVc73zt1HN6odDgiGDbnsnTWMkv5HvG9Yh7K4tYKu",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CVk1WD6ts8iRFCowZe3UWVniVU9mZcpawJpFySTrEud9",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "Cb8tGhidykNgAnJri3xbWFwnSxFNXHWwytygimVP9uhh",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "Gs8gbqLxSyhz6BprwWfymmkEtVoL1gFSwupGxb1VTgh9",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4SEGtXZFYQfqdBWH3nQ15RN3Rx9keHFwLYh1tiwvWh66",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "B12t2B4no2zGeQRm4EvWzFGWVLzoWLHDQMY8SbxVXMRS",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CJphpgZiRiDj6Bnk9Qq2S8DCsf1SFBNn9m713uUmsggD",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "27i4qCxceYJTwkbqUUKUnANDkEhkrsM4y9NQpPgvjAo2",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5jShvkhZqJty3RzmhKsXyEAgsW2U5egbjqLbDZE71eGh",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DWTS3BpwTiStxvA4NTBLbqyw45etnvwEfJEmRwNsQ9Yb",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "BnsvSWWPitYGqrzLHtX84rX8kiDfbMjCHZJ9GbBaZG67",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5Wd4JqPaLVfqQq8eLRHR8ZnQZPFZjwkFCzkQxRFeJUrr",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FiEZUNSa26x41rEUefS25z7qXQw3bNnrJT1NQmLdp3ri",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "96Gr86pFtJMPRmgxWAQz6dccRwvcf9zbeJa9padPtPMx",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "E1DbtrZXRzkRjFPjig3zdp8EYnSdqeKgZj2ULL4yx94c",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "7NJxpB12Q6cs9sUehrHHnjk9spdXF5XKgv9thkhck6n6",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6zZUEsifPvkVLtiiVHi6FBCCEKE4EtKY9Y9ppupkZ7cG",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AtdZW424Koy5kJuS39TntQnHSpwhk3gNWudhVnbZiMwk",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "HLUgcPHKtAWXxocHL6KorSXA3ejkac6LZq4GHPSgj6DP",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "GrCqynC1RNaHZP1r2xJLoCq4CZNqg18t7NzUgpf5aRvD",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "sRqQ2H6GxWyZzYAeaSDrUdQH2d9bJ2n5GGkNRTTJmWU",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AMrW5MZndZHmr2k8KghvqoctekPonLN7RGfHh2uVsZ5J",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "7Fh8QQeHACS8kLUU1Bcmtrg2cduGynLqegN9n4hyXzo9",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2KEowC8nWnpaHmBbFzLkU6muVTEVo6N8TPRpGy6u7i4b",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5TajXeHC9izNhNWU3KRZf9VRQeR8xvJxhKc4LhB14yNE",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AFJ6cZCFvQSPfejKzcB5gEd4WgHSgrMEyudZmVovKm8d",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DttaapTJLjNNVRUSA1akEe51VfwCUbCNNsoAo2Ld7msu",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AuCCLzy4yrZSr5rho2NTKQCRYgLNDXgbKXewHig2n4B2",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "G8ZU9wVYqZZmo11VXUscig9cuZHTBwFEeCtJAdtPuoH3",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "84NYUkNTLfNzJhEGTFtfiYUEtax6Da1KM9ErrtYwjLWi",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "GPfvGJRmcWJRmYqVtgfgr3X7TM8NBaAzESymrgsV9dM9",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "9ofqxN84PmR7FfysGT8HnwERgRnVQT3Xphxugp7xLjaR",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "B1xPgTnZdfPxpVpZrRgX9ysY4z2DurP21HXyeFZRY9kQ",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "GGHLC4DfBQCc3j85nrGjNyPvpz6TrFG2a5W7p19byWFC",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2F6fJoPGMrQ5iWFHiwdPYNZGj1NiooRzZgEfKyBL32QN",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5NpMCxb9obCTQBUBrw4oZPiUZFQq9bZhrQrRaAtLmYAP",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "EwE9yLjQVKL57uW4M1caWqqLaTbv3PsQyyVouz9apVUs",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "ATLeZcygycmfUxTpDvrw3TxhsHZAgW9dHRFeZ7E5dBh8",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "Ek2zkTWVtLcnrRDE5eQ9Dz5Bh8fLr6VWaj15p4kzSRmM",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "94QAvYibSbHSThK5wKZnmhFZQuhmM4Zf7J31vFVaV2jQ",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5YYiq5Sk8oSv5V7jvsMeEA1HyuPUe4YjuCc9eaRXNtTS",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3QzjwNbjckgx5qZt3Sf5TJcT3jD9q9MPTQ6er8kL54Hs",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "ENkhMtJgX6Di1qTGyQC8y2XXK38rEPdQHZLrmUN9SfbV",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DpE41Pk3F8fJMfddRoRzsYUQDjRy5WPQWZyVgJbgP6XH",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FSQ31bmsohMQY6bgRMZZf1zWG1tpz5Ji4GNwCvAxjLRb",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3Nbq2pZDjS32bw7Nk8s3ev5T15j7LosGvZR8uFSJtJhz",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FxznLSGQyLRmeVC2FfZzkVMDfVepbH4aGE5HRGYYiiAF",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3rxRgKADmDB7aQpfQgdkexZqYAMW1tuB1PR1gHTRtCBq",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "xLHav83eNE5ig4EQQ5bb4xrAWAj3yy4xwt1p4oFx8iA",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6JXeAkgJ49mdQYJ5sQhygy4ZVEFKkkNcyjiRGVEaDBKB",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CFLNBgKgBLi51LTUdMqjLw6AU2qSYsCc2PXQdcyyAohK",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DxqLaNRYKBth8PpWDD7DiB6A5JgBjZfUcwVWMXTr1AvG",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "HWKUzi5oGdDyk9GvwgrvxACirWUJzbQeRi9fxAfytVnm",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "22AENH5KF8EVd88ZMujgCMkswUuSGw94eoycLMuS6rXw",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CqjMbEyrTwCmed9jZ5xGeBfdhXL7zfzSCMJjYahw4wbW",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4oBiLjpoVgPQEGL7n2hiQir6Aqm1gTYMQu6jp5yAMwiN",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CN9kjyvMJDg1cJEdNX6mLYcNxRSEAhMieeWB3NTJTq8e",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CHVk8NbBEd2TMh5c6sAELztW296P7uprCeLvi4RhNf21",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4hRuNPXupDvYhMmNLypoqtfVQkxkQwz2hztP8NWrbroz",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "9fW8giSS2Gm1joJTafr3MQEMEq2NAYifoY28Hs2pjR1Q",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5Ci5ZjweyBqEEZKRBYjjaWSnxB4wHvsLQtUH4fkBzYUX",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AY6oLRdryX9jeCgbSLU56JLZGd9EZvxsmhQynokUoTMr",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "CTtHgoMZJfsuoirKZoFrLyNCD3zv5T5KngNBarcRZjz2",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "8chfeV62Yb4uwCPgDorrEY3KQ8dXQmVexUmJ2FkNpGnp",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DAKxbSbTZ6jDjueJihr5d2YujLXcm2oQZjxQZsmPDPtu",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6XHFNUtsAPVEwR2CS9rjzrMukqMTa8wQmuxBPHvzfeak",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "HyPeb1md4vhGSf3ezzyvThHYwPS1N7aiEeFTkm9WDf6",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5AxobKy1LC6cesTofqhDsk8DyEgh9MGzaynEtbPJaFSr",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6oFJB2KjPF6kqTCYiGgfMS5CFvHgWDUzotYBCr312pdt",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4bd44Dj7A5djbLqayuwbpKi241vjFWGtNuy3XwASh6yx",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6t4zfR3qs88a97ataJnvVzi7yLcnPcZx5A219FgXeCc8",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "EFDF35jrCgUSNaj3mknjvGTufCLHPNcMjA8Rt9ych88h",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "D1xEwU6bkSwD4g4for9TybjjPfCFvCUerneR4RayhKhm",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5NdhcDQQH1ShiVbLXwTJeKupV894cBTqbYp3dL1C6sZh",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "G1p6o14gweCYHU27bgZ9JfG7UNa2jhawTLJF1T1YVddL",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4Za5rA68SZBpGCbvP5tvfFbZBWrfgizsF7UBkQvx1z5n",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "3bBdMMqAKmf1zF3Jwb9iDjDzCKyo1gMAY4ocA3mpBQy5",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2Hs14HNr4BXT7NGs2nZuNThm9mxp6oreNRbBZYsp7X1G",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "44wLJB6R7iNCKF3YUUco3PLZMB8NX7nZCoNhhZ6m1dNB",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "6zbMpgqoLsiBcfhpHaPebuF1YjX9oMsTtVkRupLc7bQf",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "AtEBNaVyeWyRzbBiLUK2opnmgSqzvrqFLSUmHqmkXuqu",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "9iC8xqy6y3JSSsv7sV8gwTWAsECg8jToFHjra4g3pKF6",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "EyezXsEYAizGkSk21UhqViNXBtPjEcQTham6Vo3qgCeJ",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "shCZbwBjBs8KyR3TUdNGnashbW26bBuhQPDrK4rEHc4",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5MEDbzMFZbrPNXWeeAPrnobTx1aWDBUpovxbbZS7YAgT",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "5mpyRepi8hmp2t14no4YrgDKg6qBmi44C4udba1XtFBU",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "EZrib5qnxTmJHhEDhH14z8EnJH6S6pwjM1BL3f8BYynt",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "927ugChN62jVRnU12dMAweQAz5Ckfj3LdECGYWiwFxVc",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "DNpyBiHDFqVvtDuFe6JzbKVkhBYtPjvTaaVc448GPDRF",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "Hx7fAtmVgKx1Cdn87KkyqPhMLcqtVYshFqna2aUAuHEw",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "7uguGWHaBzS2abFut5u3ez7ESDdGA5YJ7Ec3e44Cohyv",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2LYKUmTMtbHVYV2vWV9mYbxem46MikzESxXh3dt3zUmm",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "4ba5MHPRjNrEfbMfsyPEFww5zJmnLH1666yVM7CAfywp",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "FEpcJTWcNxp6FF7ssk6GBxihX8DewjXqWUKPXHvGQBWa",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "7MYC2fivQTsDRFaMJ7pPzgWRqxuRtdyEm2dwJu9tyzLc",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "HzQryaJp5k9AC6uaL31pSHKMvq8WCwa6Qx5jBYcsbNhz",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "2stw2ziUnLpwrv4DYk3sXuWhBnfj2oHoVFubaz1K6xcm",
+    "reason": "Pre-stress-test cleanup: all legacy cash tables marked broken",
+    "markedAt": 1773631769888
+  },
+  {
+    "pubkey": "9MQJ5AnhxfwGvb2azGQCfjCJNeGfX8j6GpPHfhkG9h4S",
+    "reason": "OLD",
+    "markedAt": 1773632900879
+  },
+  {
+    "pubkey": "56ezQP6zJAknxPgnfGy3nJyfVukuDu1T4aB8Mzbkmi3B",
+    "reason": "retarded",
+    "markedAt": 1773633924691
+  },
+  {
+    "pubkey": "Hjzr4Sze7497HHrwJDm3ERdPk17aRbaHHjK7Acu2JNhb",
+    "reason": "old",
+    "markedAt": 1773696189646
+  },
+  {
+    "pubkey": "JBppezfi9mZeNND8ci16teacm53RXJvuEDmyR4Dc2rTw",
+    "reason": "Broken_Unknown_investigate",
+    "markedAt": 1773950688206
+  },
+  {
+    "pubkey": "5zK3ggxTuLvQeGNtuaYKNjupQUyJXoatx5WaYGiSMv6u",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965420263
+  },
+  {
+    "pubkey": "8KyJvoob6JM8YbLqubwuk8kW555JKPKvoU1abQTCjDNC",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965423945
+  },
+  {
+    "pubkey": "Ds6ns9xGwYmhwAnq35mY6nx2AxYQ4Tez5Sncmu7sY4q6",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965427646
+  },
+  {
+    "pubkey": "5fmKCYQ1PFKHadVEg8yRKAp4UutRe78gAdg53s2TYrgv",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965430977
+  },
+  {
+    "pubkey": "4msYcGxMv4cNjj6LkbwKF7cvJaPputHZPqnPxQMumTAK",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965434869
+  },
+  {
+    "pubkey": "eKwHL73RjcYVD6ij5aDJMbq18zqmrBBRCm9h6SaGXgS",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965445475
+  },
+  {
+    "pubkey": "6MQC8MfExLnffD96c6gxLqmcjASBx6qkmbAv8QNNwV4G",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965453334
+  },
+  {
+    "pubkey": "3WRNpfG5PBLUjboz3aNEHGRW4TH77XYx1BeeEYvdjQGo",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965458887
+  },
+  {
+    "pubkey": "A6Abq2hR8ifXBndM3uL7n1jB7aV6nqWziUkssCsGiBw8",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965472903
+  },
+  {
+    "pubkey": "DrtMKCvovcEZi5uCqdJGxYayKJgLS18YMBd8jfhx7d2V",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965498704
+  },
+  {
+    "pubkey": "89y3VYFZeYyaqc6se1ybBWHiT3sTMEnqTifaQnZBre29",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965503041
+  },
+  {
+    "pubkey": "9RW15ZQnk6sZMmuyKVTqfRKTe5P8GwPwACqbj6Bi5Cgm",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965509930
+  },
+  {
+    "pubkey": "E76RWyeUnmw2XoZ5dNddAvN82FRudhYcE1EZhBdrUxh1",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965514572
+  },
+  {
+    "pubkey": "BEVo6Sp2RgwVvo2As8S1i9RBYnBEqhTXHzQzgAzirHz8",
+    "reason": "Manually marked broken",
+    "markedAt": 1773965519242
+  },
+  {
+    "pubkey": "3oYVftYMLA5FrEirboZeVacUzRYGw3aGc5rjcvwB82MT",
+    "reason": "Manually marked broken",
+    "markedAt": 1774409257561
+  },
+  {
+    "pubkey": "BSvMxmi1eac9KRjEsrbucSKsPzyptzx251h7XNLb7ryw",
+    "reason": "Manually marked broken",
+    "markedAt": 1774409268649
+  },
+  {
+    "pubkey": "7YaHqgpFRovoYnuyfkdMc9HyrPqpKRerjXYrTjgCa82N",
+    "reason": "Manually marked broken",
+    "markedAt": 1774409275663
+  }
+]

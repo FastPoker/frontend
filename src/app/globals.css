@@ -1,0 +1,1251 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ─── Brand palette (white-label) ───
+       Default brand colors as space-separated RGB channels. The Tailwind brand
+       tokens (orange/orangeHi/orangeLo/amber/gold/bone) resolve to
+       rgb(var(--brand-*) / <alpha>), so changing these reskins the whole UI.
+       layout.tsx injects an override block from branding.ts when an operator
+       sets NEXT_PUBLIC_BRAND_* — these are just the fallback defaults. */
+    --brand-primary: 242 106 31;     /* rgb(var(--brand-primary)) */
+    --brand-primary-hi: 255 138 61;  /* #FF8A3D */
+    --brand-primary-lo: 184 69 21;   /* #B84515 */
+    --brand-amber: 255 198 58;       /* #FFC63A */
+    --brand-gold: 212 180 87;        /* #D4B457 */
+    --brand-bone: 245 241 230;       /* #F5F1E6 */
+
+    /* Mockup 1.4 palette re-expressed as HSL so shadcn ui/ components resolve
+       against the new orange/ink tokens. Flat hex is exposed in tailwind.config
+       (bg-ink, text-orange, etc.) for mockup-parity classes. */
+    --background: 210 24% 3%;       /* ink      #07090B */
+    --foreground: 45 50% 93%;       /* bone     #F5F1E6 */
+    --card: 218 25% 8%;             /* inkB     #10141A */
+    --card-foreground: 45 50% 93%;
+    --popover: 218 24% 12%;         /* inkC     #161B24 */
+    --popover-foreground: 45 50% 93%;
+    --primary: 19 89% 53%;          /* orange   rgb(var(--brand-primary)) */
+    --primary-foreground: 210 24% 3%;
+    --secondary: 218 25% 8%;
+    --secondary-foreground: 45 50% 93%;
+    --muted: 218 24% 12%;
+    --muted-foreground: 260 6% 43%; /* muted    #6a6578 (approx) */
+    --accent: 19 89% 53%;           /* orange   rgb(var(--brand-primary)) */
+    --accent-foreground: 210 24% 3%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 19 89% 53%;           /* orange hairline, consumer applies /14 */
+    --input: 218 25% 8%;
+    --ring: 19 89% 53%;
+    --radius: 0.625rem;
+  }
+}
+
+@layer base {
+  * { @apply border-[rgb(var(--brand-primary)/0.14)]; }
+  html, body { background: #070710; overflow-x: clip; max-width: 100%; }
+  body {
+    @apply text-bone min-h-screen antialiased;
+    font-family: var(--font-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+  /* Default page glow: faint orange radial at pot-center, pinned to viewport. */
+  body:not(.fp-site-bg) {
+    background-image:
+      radial-gradient(ellipse 70% 50% at 50% 40%, rgb(var(--brand-primary)/0.055) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 50% 100%, rgb(var(--brand-primary)/0.03) 0%, transparent 60%);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Mockup 1.4 shared-site photo background. Applied to <body> via
+   LayoutShell on every route EXCEPT '/' (home hero has its own treatment).
+   ═══════════════════════════════════════════════════════════════════ */
+body.fp-site-bg {
+  background-image:
+    linear-gradient(180deg, rgba(7,9,11,0.58) 0%, rgba(7,9,11,0.62) 40%, rgba(7,9,11,0.72) 100%),
+    url('/site-background.png');
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: fixed, fixed;
+  background-position: center center, center center;
+  background-size: cover, cover;
+  background-color: #070710;
+}
+/* Mobile Safari ignores background-attachment:fixed on <body> — fall back
+   to a pinned ::before pseudo so the effect still works. */
+@supports (-webkit-touch-callout: none) {
+  body.fp-site-bg { background-image: none; background-color: #070710; }
+  body.fp-site-bg::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(180deg, rgba(7,9,11,0.58) 0%, rgba(7,9,11,0.62) 40%, rgba(7,9,11,0.72) 100%),
+      url('/site-background.png');
+    background-repeat: no-repeat, no-repeat;
+    background-size: cover, cover;
+    background-position: center center, center center;
+  }
+  /* Lift plain content above the fixed ::before photo background (z-0).
+     :where() pins this at ZERO specificity so direct children that set their
+     own position/z-index via utilities (the sticky navbar's .z-50, fixed chat
+     widget, ActiveTableBar, etc.) keep them instead of being clobbered down to
+     z-1. The old `body.fp-site-bg > *` (specificity 0,1,1) beat `.z-50` (0,1,0)
+     and dropped the navbar into the same layer as page content — which on iOS
+     let the later-in-DOM content hit-test over the nav, so the profile-pill
+     dropdown only opened on the two routes without fp-site-bg (/about, /game/*). */
+  :where(body.fp-site-bg) > * { position: relative; z-index: 1; }
+}
+
+/* ═══ Glass-room surfaces (Direction A, 1.4 tokens) ═══ */
+.glass-room {
+  background: linear-gradient(180deg, rgba(14,14,22,0.94) 0%, rgba(10,12,18,0.90) 100%);
+  border: 1px solid rgb(var(--brand-primary)/0.14);
+  border-top-color: rgb(var(--brand-primary)/0.32);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.7), 0 2px 0 rgba(0,0,0,0.3);
+  border-radius: 0;
+}
+@media (min-width: 768px) {
+  .glass-room { border-radius: 14px; }
+}
+.glass-sub {
+  background: linear-gradient(180deg, rgba(22,24,36,0.92) 0%, rgba(18,20,28,0.88) 100%);
+  border: 1px solid rgb(var(--brand-primary)/0.10);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-radius: 10px;
+}
+.glass-pop {
+  background: linear-gradient(180deg, #10131B 0%, #0A0D14 100%);
+  border: 1px solid rgb(var(--brand-primary)/0.20);
+  border-top-color: rgb(var(--brand-primary)/0.36);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
+  border-radius: 12px;
+}
+.glass-panel {
+  background: rgba(14,14,22,0.62);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border: 1px solid rgb(var(--brand-primary)/0.10);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 10px 24px rgba(0,0,0,0.35);
+}
+.glass-card {
+  background: linear-gradient(180deg, rgba(14,14,22,0.78) 0%, rgba(10,12,18,0.72) 100%);
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgb(var(--brand-primary)/0.12);
+  border-top-color: rgb(var(--brand-primary)/0.22);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.02) inset;
+  border-radius: 12px;
+}
+@supports not ((backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px))) {
+  .glass-panel { background: rgba(14,14,22,0.9); }
+  .glass-card  { background: linear-gradient(180deg, rgba(14,14,22,0.94), rgba(10,12,18,0.92)); }
+}
+
+/* ═══ Hairlines + auto-glassify on photo-bg pages ═══ */
+.hairline   { border: 1px solid rgb(var(--brand-primary)/0.14); }
+.hairline-b { border-bottom: 1px solid rgb(var(--brand-primary)/0.12); }
+.hairline-t { border-top: 1px solid rgb(var(--brand-primary)/0.12); }
+
+body.fp-site-bg .hairline,
+body.fp-site-bg .hairline-b,
+body.fp-site-bg .hairline-t {
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+}
+body.fp-site-bg .hairline:where(hr, [role="separator"]) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Translucency override for opaque ink shades on photo-bg pages. */
+body.fp-site-bg .bg-ink   { background-color: rgba(7,9,11,0.62) !important; }
+body.fp-site-bg .bg-inkA  { background-color: rgba(10,13,16,0.66) !important; }
+body.fp-site-bg .bg-inkB  { background-color: rgba(16,20,26,0.66) !important; }
+body.fp-site-bg .bg-inkC  { background-color: rgba(22,27,36,0.68) !important; }
+body.fp-site-bg > .bg-ink,
+body.fp-site-bg > .bg-inkA,
+body.fp-site-bg > .bg-inkB { background-color: transparent !important; }
+
+/* Display-font readability boost over busy photo hot spots. */
+body.fp-site-bg h1.font-display,
+body.fp-site-bg h2.font-display,
+body.fp-site-bg h3.font-display {
+  text-shadow: 0 1px 0 rgba(0,0,0,0.55), 0 2px 18px rgba(0,0,0,0.55);
+}
+body.fp-site-bg .glass-card h1.font-display,
+body.fp-site-bg .glass-card h2.font-display,
+body.fp-site-bg .glass-card h3.font-display,
+body.fp-site-bg .hairline h1.font-display,
+body.fp-site-bg .hairline h2.font-display,
+body.fp-site-bg .hairline h3.font-display {
+  text-shadow: none;
+}
+
+/* ═══ Form module — orange gradient panel for interactive input sections ═══ */
+.fp-input-module {
+  background: linear-gradient(145deg, #000000c9 0%, #b43700e6 45%, #0a0400d1 100%);
+  border: 0px solid rgba(242, 105, 31, 0.257);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* ═══ Buttons ═══ */
+.btn-orange {
+  background: linear-gradient(180deg, #FF8A3D 0%, rgb(var(--brand-primary)) 60%, #B84515 100%);
+  color: #0a0d10;
+  border: 1px solid rgba(255,138,61,0.6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 14px rgba(0,0,0,0.4), 0 0 20px rgb(var(--brand-primary)/0.2);
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.2s ease;
+  font-weight: 700;
+}
+.btn-orange:hover  { filter: brightness(1.08); box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 8px 20px rgba(0,0,0,0.5), 0 0 28px rgb(var(--brand-primary)/0.35); }
+.btn-orange:active { transform: translateY(1px); }
+/* Legacy alias */
+.btn-gold { @apply btn-orange; }
+
+.btn-ghost {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgb(var(--brand-primary)/0.16);
+  color: #F5F1E6;
+}
+.btn-ghost:hover { background: rgb(var(--brand-primary)/0.08); border-color: rgb(var(--brand-primary)/0.32); }
+.btn-danger {
+  background: rgba(201,76,76,0.08);
+  border: 1px solid rgba(201,76,76,0.28);
+  color: #e99a9a;
+}
+.btn-danger:hover { background: rgba(201,76,76,0.14); border-color: rgba(201,76,76,0.45); }
+.btn-quiet { background: transparent; border: 1px solid rgba(245,241,230,0.1); color: #C8C2B0; }
+.btn-quiet:hover { border-color: rgb(var(--brand-primary)/0.3); color: #F5F1E6; }
+
+/* ═══ Brand word + eyebrow + tx pill + tab tick ═══ */
+.brand-word {
+  font-family: "Bebas Neue", "Oswald", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(245,241,230,0.6); /* >=4.5:1 on ink — was 0.42 (3.67:1, failed WCAG AA body) */
+}
+.tx-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid rgb(var(--brand-primary)/0.22);
+  background: rgb(var(--brand-primary)/0.06);
+  font-family: "JetBrains Mono", monospace; font-size: 10px;
+  color: #F5F1E6;
+}
+/* Card-header bar (Bryan R1, commit ea43f5b3): orange gradient + tinted bottom
+   border. Single source of truth — replaces the per-card inline hairline-b +
+   gradient copies so headers can't drift. Apply to a card's header div in place
+   of `hairline-b`. */
+.fp-card-header {
+  background: linear-gradient(180deg, rgb(var(--brand-primary)/0.28) 0%, rgb(var(--brand-primary)/0.08) 100%);
+  border-bottom: 1px solid rgb(var(--brand-primary)/0.45);
+}
+
+.tab-tick { position: relative; }
+.tab-tick::after {
+  content: ''; position: absolute; left: 50%; bottom: -1px; transform: translateX(-50%);
+  width: 18px; height: 1.5px; background: rgb(var(--brand-primary));
+}
+
+/* ═══ Footer strip (shared Lobby + Table) ═══ */
+.footer-strip {
+  border-top: 1px solid rgb(var(--brand-primary)/0.12);
+  background: linear-gradient(180deg, rgba(8,10,14,0.92), rgba(4,6,9,0.98));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ═══ Motion primitives (honor prefers-reduced-motion) ═══ */
+.fade-in { animation: fp-fade-in 0.45s ease-out both; }
+@keyframes fp-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.active-ring {
+  box-shadow: 0 0 0 1.5px rgb(var(--brand-primary)/0.85), 0 0 30px rgb(var(--brand-primary)/0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .active-breath { animation: none; }
+}
+
+/* ═══ SNG end-game cinematic animations ═══ */
+@keyframes chip-fall {
+  0%   { transform: translateY(-40px) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0.8; }
+}
+.chip-fall { animation: chip-fall 3s linear both; }
+
+@keyframes sunburst-ray {
+  0%   { opacity: 0; transform: scale(0.4); }
+  50%  { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0.2; transform: scale(1.2); }
+}
+.sunburst-ray {
+  animation: sunburst-ray 1.6s ease-out both;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip-fall, .sunburst-ray { animation: none; }
+}
+
+/* ═══ Ring helper ═══ */
+.ring-orange { box-shadow: 0 0 0 1px rgb(var(--brand-primary)/0.6); }
+.ring-gold   { box-shadow: 0 0 0 1px rgb(var(--brand-primary)/0.6); }
+
+/* ═══ Preserved table/game rules (Phase 4 reskins on top of these) ═══ */
+.poker-table-gradient {
+  background:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at center, #0e4225 0%, #082a16 50%, #04150a 100%);
+  box-shadow:
+    inset 0 0 100px rgb(var(--brand-primary)/0.06),
+    inset 0 0 40px rgba(0,0,0,0.3),
+    0 0 60px rgba(0,0,0,0.5);
+}
+.poker-table-rail {
+  background: linear-gradient(180deg, #3d2008 0%, #5c3a1a 20%, #4a2e12 50%, #3d2008 80%, #2a1606 100%);
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,0.08),
+    inset 0 -2px 4px rgba(0,0,0,0.4),
+    0 4px 20px rgba(0,0,0,0.6);
+}
+.card-shadow       { box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.1); }
+.card-shadow-hover { box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 2px rgba(255,255,255,0.15); }
+
+/* Chip discs (Phase 4 will swap to 1.4 gradient set) */
+.chip-disc { @apply rounded-full flex items-center justify-center; box-shadow: inset 0 2px 2px rgba(255,255,255,0.25), inset 0 -2px 2px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.5); }
+.chip-disc-white { background: linear-gradient(180deg, #f5f5f5 0%, #d4d4d4 100%); border: 1.5px dashed #a3a3a3; }
+.chip-disc-red   { background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%); border: 1.5px dashed #fca5a5; }
+.chip-disc-blue  { background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%); border: 1.5px dashed #93c5fd; }
+.chip-disc-green { background: linear-gradient(180deg, #22c55e 0%, #15803d 100%); border: 1.5px dashed #86efac; }
+.chip-disc-black { background: linear-gradient(180deg, #374151 0%, #111827 100%); border: 1.5px dashed #6b7280; }
+
+/* Scrollbar: orange-tinted per 1.4 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--brand-primary)/0.16); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--brand-primary)/0.30); }
+
+/* Turn-timer border: a registered <angle> so the conic-gradient sweep can be
+   transitioned smoothly between per-tick timeLeft updates (plain custom props
+   don't interpolate). Drives the depleting border on the active seat's
+   nameplate (TurnTimerBorder). */
+@property --fp-timer-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Showdown / animation library — unchanged (Phase 4 may tighten). */
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(12px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cardReveal { 0% { opacity: 0; transform: rotateY(90deg) scale(0.8); } 50% { opacity: 1; transform: rotateY(0deg) scale(1.08); } 100% { opacity: 1; transform: rotateY(0deg) scale(1); } }
+@keyframes winnerPulse { 0%,100% { box-shadow: 0 0 20px rgb(var(--brand-primary)/0.3), 0 0 60px rgb(var(--brand-primary)/0.1); } 50% { box-shadow: 0 0 30px rgb(var(--brand-primary)/0.6), 0 0 80px rgb(var(--brand-primary)/0.2); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes bounceOnce { 0% { transform: scale(0.8) translateY(10px); opacity: 0; } 50% { transform: scale(1.05) translateY(-4px); opacity: 1; } 70% { transform: scale(0.98) translateY(1px); } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+@keyframes chipSlideIn { 0% { transform: translateY(8px) scale(0.6); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes potPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.pot-pulse { animation: potPulse 0.5s ease-out; }
+.animate-fadeInUp { animation: fadeInUp 0.6s ease-out both; }
+.animate-fadeIn { animation: fadeIn 0.5s ease-out both; }
+.animate-cardReveal { animation: cardReveal 0.6s ease-out both; }
+.animate-winnerPulse { animation: winnerPulse 2s ease-in-out infinite; }
+.animate-bounce-once { animation: bounceOnce 0.7s ease-out both; }
+.animate-shimmer { background: linear-gradient(90deg, transparent 0%, rgb(var(--brand-primary)/0.18) 50%, transparent 100%); background-size: 200% 100%; animation: shimmer 2s linear infinite; }
+
+.seat-info-box {
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.4);
+}
+.seat-info-box-hero {
+  background: linear-gradient(180deg, rgb(var(--brand-primary)/0.12) 0%, rgb(var(--brand-primary)/0.04) 100%);
+  box-shadow: inset 0 1px 0 rgb(var(--brand-primary)/0.18), inset 0 -1px 0 rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.4), 0 0 12px rgb(var(--brand-primary)/0.10);
+}
+
+.timer-bar-track { height: 3px; border-radius: 2px; background: rgb(var(--brand-primary)/0.12); overflow: hidden; }
+.timer-bar-fill  { height: 100%; border-radius: 2px; transition: width 1s linear; }
+.timer-bar-fill.timer-critical { animation: timerPulse 0.5s ease-in-out infinite; }
+@keyframes timerPulse { 0%,100% { opacity: 1; box-shadow: 0 0 4px currentColor; } 50% { opacity: 0.6; box-shadow: 0 0 8px currentColor; } }
+
+@keyframes actionSlideIn { 0% { transform: translateY(4px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+.animate-actionSlideIn { animation: actionSlideIn 0.25s ease-out both; }
+
+@keyframes seatPulse { 0%,100% { border-color: rgb(var(--brand-primary)/0.15); box-shadow: 0 0 0 0 rgb(var(--brand-primary)/0); } 50% { border-color: rgb(var(--brand-primary)/0.45); box-shadow: 0 0 12px 2px rgb(var(--brand-primary)/0.12); } }
+.seat-empty-pulse { animation: seatPulse 3s ease-in-out infinite; }
+
+.glow-orange {
+  box-shadow: 0 0 12px rgb(var(--brand-primary)/0.45), 0 0 24px rgb(var(--brand-primary)/0.2), inset 0 0 8px rgb(var(--brand-primary)/0.12);
+}
+@media (prefers-reduced-motion: reduce) { .glow-orange { box-shadow: 0 0 8px rgb(var(--brand-primary)/0.35); } }
+
+/* Progression avatar frame animations — tier halos (breathe) and rotating
+   outer rings on Gold+/Diamond tiers. Disabled under prefers-reduced-motion. */
+@keyframes xp-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.xp-rotate { animation: xp-rotate 24s linear infinite; }
+@keyframes xp-breathe { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+.xp-breathe { animation: xp-breathe 3.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .xp-rotate, .xp-breathe { animation: none; }
+}
+
+@keyframes goldenBurst { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
+.winner-burst::before { content: ''; position: absolute; inset: -8px; border-radius: 12px; border: 2px solid rgb(var(--brand-primary)/0.6); animation: goldenBurst 0.8s ease-out 0.1s both; pointer-events: none; }
+.winner-burst::after  { content: ''; position: absolute; inset: -4px; border-radius: 12px; border: 1px solid rgb(var(--brand-primary)/0.3); animation: goldenBurst 0.8s ease-out 0.3s both; pointer-events: none; }
+
+@keyframes ceremonyPop {
+  0% { opacity: 0; transform: translateX(18px) scale(0.94); filter: blur(2px); }
+  14% { opacity: 1; transform: translateX(0) scale(1.04); filter: blur(0); }
+  72% { opacity: 1; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(8px) scale(0.98); }
+}
+.ceremony-pop { animation: ceremonyPop 3.8s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+
+/* ── Keyboard focus ring (Bryan DP-7, commit 7789210e) ─────────────────────
+   Global :focus-visible so every button / link / input shows the orange ring
+   on KEYBOARD focus. Unlayered + after @tailwind utilities, so it wins over the
+   many `focus:outline-none` utilities for keyboard users. Mouse focus stays
+   ring-free — that is the :focus-visible contract. */
+:focus-visible {
+  outline: 2px solid rgb(var(--brand-primary)/0.75);
+  outline-offset: 2px;
+}
+
+input[type='range'].poker-slider {
+  -webkit-appearance: none; appearance: none;
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, rgb(var(--brand-primary)/0.25) 0%, rgb(var(--brand-primary)/0.5) 100%);
+  outline: none;
+}
+input[type='range'].poker-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+  background: linear-gradient(180deg, #FF8A3D 0%, #B84515 100%);
+  border: 2px solid #FFD96A;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.3);
+  cursor: pointer; transition: transform 0.15s ease;
+}
+input[type='range'].poker-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+input[type='range'].poker-slider::-webkit-slider-thumb:active { transform: scale(0.95); }
+input[type='range'].poker-slider::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: linear-gradient(180deg, #FF8A3D 0%, #B84515 100%);
+  border: 2px solid #FFD96A;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.3);
+  cursor: pointer;
+}
+
+@keyframes foldReveal { 0% { opacity: 0; backdrop-filter: blur(0); } 100% { opacity: 1; backdrop-filter: blur(2px); } }
+.fold-overlay { animation: foldReveal 0.3s ease-out both; }
+@keyframes foldTextSlide { 0% { transform: translateY(4px) scale(0.9); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+.fold-text { animation: foldTextSlide 0.3s ease-out 0.1s both; }
+
+@keyframes chipSweep { 0% { transform: translateY(-30px) scale(0.5); opacity: 0.8; } 60% { transform: translateY(0) scale(1.1); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+.animate-chipSweep { animation: chipSweep 0.6s ease-out both; }
+
+@keyframes collectToPot { 0% { opacity: 1; transform: translate(var(--dx, 0), var(--dy, 0)) scale(1); } 70% { opacity: 0.8; transform: translate(0, 0) scale(0.7); } 100% { opacity: 0; transform: translate(0, 0) scale(0.3); } }
+.animate-collectToPot { animation: collectToPot 0.6s ease-in both; }
+
+@keyframes potGrow { 0% { transform: translate(-50%, 0) scale(1); } 40% { transform: translate(-50%, 0) scale(1.15); } 100% { transform: translate(-50%, 0) scale(1); } }
+.animate-potGrow { animation: potGrow 0.4s ease-out 0.5s both; }
+
+.action-btn { transition: all 0.15s ease; }
+.action-btn:active:not(:disabled) { transform: scale(0.93); }
+
+/* Wallet adapter overrides: orange-on-ink per 1.4 */
+.wallet-adapter-button {
+  background: rgb(var(--brand-primary)/0.08) !important;
+  border: 1px solid rgb(var(--brand-primary)/0.35) !important;
+  border-radius: 10px !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  height: 40px !important;
+  color: #F5F1E6 !important;
+}
+.wallet-adapter-button:hover { background: rgb(var(--brand-primary)/0.18) !important; }
+.wallet-adapter-button-trigger {
+  background: linear-gradient(180deg, #FF8A3D 0%, rgb(var(--brand-primary)) 60%, #B84515 100%) !important;
+  color: #0a0d10 !important;
+  border: 1px solid rgba(255,138,61,0.6) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Poker Table — Mockup 1.4 felt surface & card classes
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Felt surface wrapper — fills available height in flex parent, adds mockup rim padding */
+.felt-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: 20px 24px 28px;
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 40%, rgb(var(--brand-primary)/0.05) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(8,8,16,0.4) 0%, rgba(4,4,10,0.6) 100%),
+    url('/brand/table_bg.png') center / cover no-repeat;
+}
+
+/* Oval felt table — elliptical per mockup, fills wrap, overflow visible for seat overflow */
+.felt-oval {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  /* Mobile: taller aspect so seats don't overlap community cards. Desktop keeps 16/9. */
+  aspect-ratio: 5 / 4;
+  border-radius: 50% / 38%;
+  background:
+    radial-gradient(ellipse 55% 45% at 50% 42%, rgb(var(--brand-primary)/0.07) 0%, transparent 62%),
+    radial-gradient(ellipse at 50% 45%, #153C2C 0%, #0D2D20 55%, #06180F 100%);
+  box-shadow:
+    inset 0 0 140px rgba(0,0,0,0.55),
+    inset 0 0 0 1px rgb(var(--brand-primary)/0.22),
+    inset 0 0 0 8px rgb(var(--brand-primary)/0.05),
+    0 40px 80px rgba(0,0,0,0.55);
+  overflow: visible;
+}
+@media (min-width: 768px) {
+  .felt-oval { aspect-ratio: 16 / 9; }
+}
+/* Landscape mobile: flatten oval to fill horizontal space, reduce wrap padding */
+@media (orientation: landscape) and (max-height: 500px) {
+  .felt-wrap { padding: 8px 10px 10px; margin-top: 0; }
+  /* Fill the available row height instead of a flat ratio that max-height crushes. */
+  .felt-oval { aspect-ratio: auto; height: 100%; min-height: 180px; }
+}
+
+/* Inner inlay ring — elliptical */
+.felt-inlay {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50% / 38%;
+  border: 1px solid rgb(var(--brand-primary)/0.18);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--brand-primary)/0.04),
+    inset 0 0 60px rgb(var(--brand-primary)/0.04);
+  pointer-events: none;
+}
+.felt-inlay::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50% / 38%;
+  border: 1px dashed rgb(var(--brand-primary)/0.08);
+  pointer-events: none;
+}
+
+/* Seat hover peek — opacity gated by :hover / :focus-within (mobile tap) on .seat-wrap */
+.seat-peek {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 150ms ease, transform 150ms ease;
+  pointer-events: none;
+}
+.seat-wrap:hover .seat-peek,
+.seat-wrap:focus-within .seat-peek { opacity: 1; transform: translateY(0); }
+/* Lift the active seat above all siblings so the peek card isn't clipped */
+.seat-wrap:hover,
+.seat-wrap:focus-within { z-index: 200 !important; }
+
+/* Mobile: shrink seat content so avatar+info box doesn't overlap community cards */
+@media (max-width: 767px) {
+  .seat-wrap > * {
+    transform: scale(0.82);
+    transform-origin: center;
+  }
+}
+
+/* Center content container — pot + community cards */
+.felt-center {
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Playing Cards ─── */
+
+/* Card back — warm dark with brand-orange accents to read against the felt */
+.card-back {
+  border-radius: 6px;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.55),
+    0 0 0 1px rgb(var(--brand-primary)/0.06);
+}
+
+/* Card face */
+.card-face {
+  border-radius: 6px;
+  background: #f8f4ec;
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* Suit colours on card face.
+   Default: red suits (heart/diamond) = red, black suits (spade/club) = black.
+   4-color deck: heart=red, diamond=blue, club=green, spade=black.
+   Switch is driven by the data-deck-colors attribute on <html> (see
+   lib/card-prefs.ts). Legacy .suit-red / .suit-black retained for any
+   non-PlayingCard consumers. */
+.suit-red    { color: #c0392b; }
+.suit-black  { color: #0d0d0d; }
+.suit-spade  { color: #0d0d0d; }
+.suit-heart  { color: #c0392b; }
+.suit-diamond { color: #c0392b; }
+.suit-club   { color: #0d0d0d; }
+[data-deck-colors="4color"] .suit-diamond { color: #1e6cd8; }
+[data-deck-colors="4color"] .suit-club    { color: #1a8a48; }
+
+/* Card font override. PlayingCard ships with Tailwind's `font-display`;
+   serif / mono variants override via !important on the rendered class
+   stack. Keep this in lockstep with CardFont in lib/card-prefs.ts. */
+[data-card-font="serif"] .card-face {
+  font-family: ui-serif, Georgia, "Times New Roman", serif !important;
+}
+[data-card-font="mono"] .card-face {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
+}
+/* Bicycle Rider-Back-style. Bitter Black (900) approximates the chunky
+   Bookman/serif numerals on standard Bicycle corner indices. */
+[data-card-font="cards"] .card-face {
+  font-family: var(--font-card-serif), "Bookman Old Style", "URW Bookman", Georgia, serif !important;
+  font-weight: 900 !important;
+}
+/* Bicycle Big Print / EZ See — chunky condensed sans that matches the
+   oversized rank stamps on the EZ See product line. */
+[data-card-font="bigez"] .card-face {
+  font-family: var(--font-card-bigez), Oswald, "Bebas Neue", "Arial Narrow", sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Deal-in animation */
+@keyframes dealIn {
+  0%   { opacity: 0; transform: translateY(-12px) scale(0.88) rotate(-3deg); }
+  60%  { opacity: 1; transform: translateY(2px) scale(1.03) rotate(0.5deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+}
+.deal-in { animation: dealIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ─── Chip Stack (Mockup 1.4 palette) ─── */
+
+/* Base chip disc */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.15);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Deal-in animation for chips flying to pot */
+@keyframes chipIn {
+  0%   { opacity: 0; transform: scale(0.5) translateY(-8px); }
+  70%  { opacity: 1; transform: scale(1.1) translateY(1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.chip-in { animation: chipIn 0.35s ease-out both; }
+
+@keyframes chipArcToPot {
+  0% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0.65); }
+  20% { opacity: 1; }
+  70% { transform: translate(calc(var(--sx) * 0.18), calc(var(--sy) * 0.18 - 18px)) scale(1.08); }
+  100% { opacity: 0; transform: translate(0, 0) scale(0.9); }
+}
+.chip-arc { animation: chipArcToPot 0.72s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+@keyframes chipArcToSeat {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.65); }
+  18% { opacity: 1; }
+  72% { transform: translate(calc(var(--sx) * 0.82), calc(var(--sy) * 0.82 - 16px)) scale(1.08); }
+  100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0.9); }
+}
+.chip-arc-to-seat { animation: chipArcToSeat 0.86s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+
+/* Chip colour variants */
+.chip-gold { background: linear-gradient(160deg, #ffe082 0%, #C9A84C 50%, #a07830 100%); color: #3d2800; border-color: rgba(255,224,130,0.4); }
+.chip-bone { background: linear-gradient(160deg, #f5f1e6 0%, #c8c2b0 50%, #a09880 100%); color: #2a2318; border-color: rgba(245,241,230,0.35); }
+.chip-red  { background: linear-gradient(160deg, #f06060 0%, #c0392b 50%, #8e1a1a 100%); color: #fff0f0; border-color: rgba(240,96,96,0.4); }
+.chip-blu  { background: linear-gradient(160deg, #6090e0 0%, #2563c0 50%, #103080 100%); color: #e8f0ff; border-color: rgba(96,144,224,0.4); }
+.chip-ink  { background: linear-gradient(160deg, #404860 0%, #1c2030 50%, #0a0c14 100%); color: #a0aacc; border-color: rgba(64,72,96,0.5); }
+
+/* ─── Gold range slider ─── */
+input[type='range'].gold-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    #C9A84C 0%,
+    #C9A84C var(--pct, 50%),
+    rgba(245,241,230,0.12) var(--pct, 50%),
+    rgba(245,241,230,0.12) 100%
+  );
+}
+input[type='range'].gold-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffe082, #C9A84C 55%, #8a6020 100%);
+  border: 1.5px solid rgba(255,224,130,0.5);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+input[type='range'].gold-slider::-webkit-slider-thumb:hover  { transform: scale(1.15); }
+input[type='range'].gold-slider::-webkit-slider-thumb:active { transform: scale(0.95); }
+input[type='range'].gold-slider::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffe082, #C9A84C 55%, #8a6020 100%);
+  border: 1.5px solid rgba(255,224,130,0.5);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  cursor: pointer;
+}
+/* Touch-target bump for phones. Desktop keeps the compact 16px thumb. */
+@media (max-width: 767px) {
+  input[type='range'].gold-slider {
+    height: 28px;
+  }
+  input[type='range'].gold-slider::-webkit-slider-thumb {
+    width: 26px; height: 26px;
+  }
+  input[type='range'].gold-slider::-moz-range-thumb {
+    width: 26px; height: 26px;
+  }
+}
+
+/* ─── Winner pulse on seat (gold) ───
+   Renamed from `winnerPulse` to end the name collision with the ORANGE
+   @keyframes winnerPulse above. Duplicate keyframe names meant the orange
+   `.animate-winnerPulse` resolved to this gold definition (last one wins). */
+@keyframes winnerPulseGold {
+  0%   { box-shadow: 0 0 0 0 rgba(201,168,76,0.7); }
+  50%  { box-shadow: 0 0 0 10px rgba(201,168,76,0); }
+  100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); }
+}
+.winner-pulse { animation: winnerPulseGold 1s ease-out 3; }
+
+/* ─── Active seat breathing glow ─── */
+@keyframes activeBreathe {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(201,168,76,0.35), 0 0 8px rgba(201,168,76,0.15); }
+  50%       { box-shadow: 0 0 0 2px rgba(201,168,76,0.65), 0 0 18px rgba(201,168,76,0.3); }
+}
+.active-breath { animation: activeBreathe 1.8s ease-in-out infinite; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Verify Hand page — Mockup 1.4 component classes
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Status badges */
+.badge-green {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.30);
+  color: #34D399;
+}
+.badge-amber {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgba(255,198,58,0.12); border: 1px solid rgba(255,198,58,0.30);
+  color: #FFC63A;
+}
+.badge-bone {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgba(245,241,230,0.07); border: 1px solid rgba(245,241,230,0.16);
+  color: rgba(245,241,230,0.55);
+}
+.badge-orange {
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgb(var(--brand-primary)/0.12); border: 1px solid rgb(var(--brand-primary)/0.30);
+  color: rgb(var(--brand-primary));
+}
+
+/* Playing-card mini pill used in verify page */
+.card-mini {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 34px; border-radius: 4px;
+  background: #f8f4ec; border: 1px solid rgba(0,0,0,0.14);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  font-weight: 700; color: #0d0d0d; line-height: 1;
+}
+.card-mini.red  { color: #c0392b; }
+.card-mini.back {
+  background: linear-gradient(145deg, #1a2a3a 0%, #0d1821 100%);
+  border-color: rgb(var(--brand-primary)/0.22);
+  color: rgba(245,241,230,0.4);
+}
+
+/* Two-column verify layout: left checks, right metadata */
+.verify-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 900px) {
+  .verify-grid { grid-template-columns: 3fr 2fr; }
+}
+
+/* Lookup bar input group */
+.lookup-bar { border: 1px solid rgb(var(--brand-primary)/0.18); border-radius: 6px; }
+
+/* Commit-chain visualization */
+.chain-viz {
+  display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; padding-bottom: 2px;
+}
+.chain-cell {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 6px;
+  background: rgba(14,14,22,0.7); border: 1px solid rgb(var(--brand-primary)/0.14);
+  text-align: center;
+}
+.chain-cell.active { border-color: rgb(var(--brand-primary)/0.45); background: rgb(var(--brand-primary)/0.06); }
+.chain-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(245,241,230,0.5); letter-spacing: 0.14em; margin-bottom: 3px; }
+.chain-hash  { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #FFC63A; word-break: break-all; margin-bottom: 2px; }
+.chain-meta  { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(245,241,230,0.35); letter-spacing: 0.1em; }
+.chain-link  { font-size: 16px; color: rgb(var(--brand-primary)/0.5); flex-shrink: 0; }
+
+/* Cryptographic check step */
+.check-row { border-bottom: 1px solid rgb(var(--brand-primary)/0.10); }
+.check-row:last-child { border-bottom: none; }
+.step-num {
+  display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.35);
+  color: #34D399;
+}
+.step-num.bad {
+  background: rgb(var(--brand-primary)/0.12); border-color: rgb(var(--brand-primary)/0.35); color: rgb(var(--brand-primary));
+}
+
+/* Data key-value block */
+.data-block {
+  background: rgba(7,9,11,0.5); border: 1px solid rgb(var(--brand-primary)/0.10);
+  border-radius: 5px; padding: 8px 10px;
+}
+.mono-wrap { word-break: break-all; }
+
+/* Crank operator table */
+.crank-table { font-size: 11px; }
+.crank-row {
+  display: grid;
+  grid-template-columns: 1fr 52px 46px 80px;
+  align-items: center; gap: 6px;
+  padding: 6px 10px;
+}
+.crank-head { padding: 5px 10px; background: rgba(7,9,11,0.4); }
+
+/* Rake distribution row */
+.rake-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap-x: 6px; gap-y: 2px;
+  padding: 6px 0; border-bottom: 1px solid rgb(var(--brand-primary)/0.08);
+}
+.rake-row:last-child { border-bottom: none; }
+.rake-wallet { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(245,241,230,0.40); }
+
+/* Verify seal badge */
+.verify-seal {
+  display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(52,211,153,0.08); border: 1.5px solid rgba(52,211,153,0.30);
+}
+
+/* ========================================================================
+   Paradice Technologies wordmark — used by the waitlist Footer.
+   Mirrors paradice.ai's wordmark treatment (Paradice Display 600 with
+   0.04em tracking on the name; mono caption with wide tracking on the
+   tagline). Sized at the equivalent of paradice.ai's `wordmark-xs`.
+   ======================================================================== */
+@font-face {
+  font-family: 'Paradice Display';
+  src: url('/fonts/ParadiceDisplay-Regular.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Race Sport';
+  src: url('/fonts/Race%20Sport.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Re-anchor glyph so font-display aligns optically without per-element top nudges. */
+  ascent-override: 90%;
+  descent-override: 10%;
+  line-gap-override: 0%;
+}
+
+/* Race Sport governs every element using the `font-display` utility, plus
+   any <h2> not explicitly opted into font-mono (terminal-style eyebrows/
+   labels keep JetBrains Mono). Placed after @tailwind utilities so source
+   order wins at equal specificity. */
+.font-display:not(.font-mono),
+h2:not(.font-mono),
+h2.font-heading:not(.font-mono),
+h2.font-serif:not(.font-mono),
+h2.font-sans:not(.font-mono) {
+  font-family: 'Race Sport', 'Bebas Neue', 'Oswald', sans-serif;
+  letter-spacing: normal;
+}
+
+.paradice-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  line-height: 1;
+  user-select: none;
+}
+.paradice-wordmark-name {
+  font-family: 'Paradice Display', 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 35%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+.paradice-wordmark-tagline {
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+  font-family: 'JetBrains Mono', 'Montserrat', 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 0.42rem;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: rgba(245, 241, 230, 0.55);
+  transition: color 0.2s ease;
+}
+.paradice-wordmark-link:hover .paradice-wordmark-tagline {
+  color: rgba(245, 241, 230, 0.85);
+}
+.paradice-wordmark-link:hover .paradice-wordmark-name {
+  filter: drop-shadow(0 0 14px rgba(167, 139, 250, 0.45));
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Design-final port (May 2026) — Lobby chrome + banner gradient ring
+   Source: Fast Poker frontend design-final
+   Race Sport @font-face metric overrides applied above on the existing rule.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Carousel-matched gradient ring for banner cards. Uses mask-composite
+   so the ring respects the parent's border-radius. */
+.fp-banner-gradient-border {
+  position: relative;
+}
+.fp-banner-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(135deg, rgb(var(--brand-primary)) 0%, #FFC63A 35%, rgb(var(--brand-primary)) 70%, #B84515 100%);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Touch-target bump for phones on the gold range slider. */
+@media (max-width: 767px) {
+  input[type='range'].gold-slider {
+    height: 28px;
+  }
+  input[type='range'].gold-slider::-webkit-slider-thumb {
+    width: 26px; height: 26px;
+  }
+  input[type='range'].gold-slider::-moz-range-thumb {
+    width: 26px; height: 26px;
+  }
+}
+
+/* Lobby port · Phase 1: outer shell. */
+.fp-lobby-shell {
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+}
+
+/* Lobby port · Phase 3: tabs. */
+.fp-lobby-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.fp-lobby-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  min-width: 0;
+  padding: 14px 10px 12px;
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(66, 74, 68, 0.10) 0%, rgba(25, 30, 30, 0) 100%);
+  color: rgba(245, 241, 230, 0.55);
+  text-align: center;
+  font-size: clamp(0.98rem, 0.74rem + 0.78vw, 1.32rem);
+  line-height: 1.1;
+  letter-spacing: clamp(0.02em, 0.01em + 0.08vw, 0.05em);
+  text-transform: uppercase;
+  transition: 180ms ease;
+  cursor: pointer;
+}
+.fp-lobby-tab:hover:not(.is-active) {
+  color: rgba(245, 241, 230, 0.85);
+}
+.fp-lobby-tab + .fp-lobby-tab {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+.fp-lobby-tab.is-active {
+  color: #ffffff;
+  background: linear-gradient(180deg, #1B4730 0%, #0c1f15 60%, #061008 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(45, 110, 75, 0.55),
+    0 6px 14px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(28, 80, 50, 0.2);
+  font-weight: 700;
+}
+.fp-lobby-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: #064E3B;
+}
+
+/* Lobby port · Phase 4: header stat cards. */
+.fp-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, #D4B457 40%, transparent);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(24, 30, 25, 0.58) 0%, rgba(4, 7, 6, 0.68) 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+.fp-stat-card__label {
+  color: #6b7480;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.fp-stat-card__value {
+  color: #F5F1E6;
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+  line-height: 1;
+  margin-top: 4px;
+}
+
+/* Lobby port · Phase 5: inner panel padding. */
+.fp-lobby-panel {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  margin: 0;
+  background: linear-gradient(180deg, rgba(14, 14, 22, 0.82) 0%, rgba(10, 12, 18, 0.72) 100%);
+  border: 1px solid rgba(242, 105, 31, 0.38);
+  border-radius: 0 0 6px 6px;
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Lobby port · Phase 6: pool-card JOIN CTA. */
+.fp-cta-join {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, rgba(74, 32, 15, 0.88) 0%, rgba(55, 25, 11, 0.96) 100%);
+  border: 1px solid rgb(var(--brand-primary)/0.34);
+  color: rgb(var(--brand-primary));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 195, 132, 0.10),
+    0 0 0 1px rgb(var(--brand-primary)/0.10);
+  transition: 150ms ease;
+  cursor: pointer;
+}
+.fp-cta-join:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(94, 42, 19, 0.94) 0%, rgba(72, 30, 12, 0.98) 100%);
+  border-color: rgb(var(--brand-primary)/0.55);
+  color: #FF8A3D;
+}
+.fp-cta-join:disabled {
+  cursor: not-allowed;
+}
+
+/* Lobby port · Phase 8: pool-grid panel + card-view grid. */
+.fp-pool-grid {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(95, 106, 95, 0.22);
+  background: linear-gradient(180deg, rgba(24, 30, 25, 0.58) 0%, rgba(4, 7, 6, 0.68) 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+.fp-pool-grid > div { border-color: rgba(255, 255, 255, 0.06); }
+.fp-sng-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .fp-sng-grid { grid-template-columns: 1fr; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .fp-sng-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── Electric action buttons ──────────────────────────────── */
+.electric-btn {
+  --e-color: #6677ff;
+  --e-glow: rgba(102,119,255,0.35);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: rgba(2, 3, 10, 0.97);
+  border: 0.5px solid var(--e-color);
+  border-radius: 8px;
+  color: var(--e-color);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 9px 16px 8px;
+  cursor: pointer;
+  min-width: 64px;
+  box-shadow:
+    0 0 0 1.25px rgba(2,3,10,0.96),
+    0 0 0 2.5px var(--e-color),
+    0 0 10px var(--e-color),
+    0 0 22px var(--e-glow),
+    inset 0 0 6px rgba(0,0,0,0.85);
+  transition: box-shadow 180ms ease;
+}
+
+.electric-btn:hover:not(:disabled) {
+  box-shadow:
+    0 0 0 1.25px rgba(2,3,10,0.96),
+    0 0 0 2.5px var(--e-color),
+    0 0 18px var(--e-color),
+    0 0 42px var(--e-glow),
+    0 0 70px var(--e-glow),
+    inset 0 0 6px rgba(0,0,0,0.85);
+}
+.electric-btn:active:not(:disabled) {
+  box-shadow:
+    0 0 0 1.25px rgba(2,3,10,0.96),
+    0 0 0 2.5px var(--e-color),
+    0 0 8px var(--e-color),
+    0 0 16px var(--e-glow),
+    inset 0 0 6px rgba(0,0,0,0.85);
+}
+.electric-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.electric-btn--fold  { --e-color: #6677ff; --e-glow: rgba(102,119,255,0.35); }
+.electric-btn--call  { --e-color: #00cc66; --e-glow: rgba(0,204,102,0.35); }
+.electric-btn--raise { --e-color: #ff6622; --e-glow: rgba(255,102,34,0.38); }
+
+/* Lobby port · Phase 9: individual SNG pool card. */
+.fp-sng-card {
+  padding: 16px 16px 14px;
+  border-radius: 6px;
+  border: 2px solid rgb(var(--brand-primary)/0.8);
+  background-image: url('/brand/play_card_bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 18px 36px rgba(0, 0, 0, 0.14);
+  gap: 12px;
+}
+
+/* Lobby port · Phase 11: secondary CTA. */
+.fp-cta-secondary {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(47, 54, 46, 0.92) 0%, rgba(32, 39, 32, 0.96) 100%);
+  border: 1px solid rgba(88, 108, 89, 0.34);
+  color: rgba(245, 241, 230, 0.82);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: 150ms ease;
+  cursor: pointer;
+}
+.fp-cta-secondary:hover:not(:disabled) {
+  border-color: rgba(212, 180, 87, 0.4);
+  color: #F5F1E6;
+}
