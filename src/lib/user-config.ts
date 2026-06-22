@@ -10,6 +10,18 @@
 const RPC_KEY = 'fp.rpcUrl';
 const WS_KEY = 'fp.wsUrl';
 
+function resolveRuntimeUrl(raw: string, websocket = false): string {
+  if (!raw) return '';
+  if (raw.toLowerCase() === 'pool') return raw;
+  if (raw.startsWith('/') && typeof window !== 'undefined') {
+    const origin = websocket
+      ? window.location.origin.replace(/^http/i, 'ws')
+      : window.location.origin;
+    return `${origin}${raw}`;
+  }
+  return raw;
+}
+
 function ls(): Storage | null {
   if (typeof window === 'undefined') return null;
   try { return window.localStorage; } catch { return null; }
@@ -50,11 +62,11 @@ export function isPoolForced(): boolean {
 /** Effective L1 RPC. Precedence: forced 'pool' > user URL > build-time env.
  *  Returns 'pool' when forced (shouldUsePool() recognizes that sentinel). */
 export function getEffectiveRpcUrl(): string {
-  return getUserRpcUrl() || (process.env.NEXT_PUBLIC_L1_RPC_URL || '').trim();
+  return resolveRuntimeUrl(getUserRpcUrl() || (process.env.NEXT_PUBLIC_L1_RPC_URL || '').trim());
 }
 export function getEffectiveWsUrl(): string {
   if (isPoolForced()) return ''; // pool builds its own connection; ignore env WS
-  return getUserWsUrl() || (process.env.NEXT_PUBLIC_L1_WS_URL || '').trim();
+  return resolveRuntimeUrl(getUserWsUrl() || (process.env.NEXT_PUBLIC_L1_WS_URL || '').trim(), true);
 }
 
 /** True when a real custom RPC URL is active — NOT the free pool, NOT the env

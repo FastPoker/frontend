@@ -2,9 +2,10 @@
  * Central RPC endpoint resolution.
  *
  * Server-side (API routes, scripts): use `getL1Rpc()` — throws if no URL is set.
- * Client-side (browser bundles): import `L1_RPC_CLIENT` — empty string if no
- *   public URL is configured, so misconfig surfaces as an RPC failure rather
- *   than a hard crash during module init.
+ * Client-side (browser bundles): import `L1_RPC_CLIENT`. It resolves
+ * `NEXT_PUBLIC_L1_RPC_URL` and falls back to same-origin `/rpc` for Node builds;
+ * higher-level helpers still use the public pool when the operator did not
+ * explicitly configure a browser RPC.
  *
  * URLs are read as env variables. There is no hardcoded provider URL anywhere.
  *

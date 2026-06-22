@@ -21,6 +21,7 @@ import { TransferFundsModal } from '@/components/modals/TransferFundsModal';
 import { SFX } from '@/lib/sfx';
 import { PROFILE_API_ENABLED } from '@/lib/feature-flags';
 import { BRAND } from '@/lib/branding';
+import { PRIVY_AUTH_ENABLED } from '@/lib/privy-config';
 
 function shortWallet(addr: string, n = 4): string {
   return `${addr.slice(0, n)}…${addr.slice(-n)}`;
@@ -34,14 +35,32 @@ function MenuIcon({ d }: { d: string }) {
   );
 }
 
+type PrivyProfileState = {
+  privyAuthenticated: boolean;
+  privyUser: ReturnType<typeof usePrivy>['user'] | null;
+  exportWallet: ReturnType<typeof useExportWallet>['exportWallet'] | null;
+};
+
+function usePrivyProfileEnabled(): PrivyProfileState {
+  const { authenticated: privyAuthenticated, user: privyUser } = usePrivy();
+  const { exportWallet } = useExportWallet();
+  return { privyAuthenticated, privyUser, exportWallet };
+}
+
+function usePrivyProfileDisabled(): PrivyProfileState {
+  return { privyAuthenticated: false, privyUser: null, exportWallet: null };
+}
+
+const usePrivyProfile: () => PrivyProfileState =
+  PRIVY_AUTH_ENABLED ? usePrivyProfileEnabled : usePrivyProfileDisabled;
+
 export function ProfilePill() {
   const w = useUnifiedWallet();
   const { open: openConnect } = useConnectModal();
   const connected = w.isConnected;
   const publicKey = w.publicKey;
   const disconnect = w.logout;
-  const { authenticated: privyAuthenticated, user: privyUser } = usePrivy();
-  const { exportWallet } = useExportWallet();
+  const { privyAuthenticated, privyUser, exportWallet } = usePrivyProfile();
   const pathname = usePathname() || '';
   const [open, setOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -109,7 +128,7 @@ export function ProfilePill() {
   };
 
   const exportPrivyWallet = () => {
-    if (!exportWalletAddress) return;
+    if (!exportWalletAddress || !exportWallet) return;
     setOpen(false);
     exportWallet({ address: exportWalletAddress }).catch(() => {});
   };

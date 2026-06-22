@@ -1,6 +1,6 @@
 ---
 name: fastpoker-frontend-public-setup
-description: Run, verify, publish, or troubleshoot the FastPoker standalone source-code frontend. Use when an agent is asked to set up the repo, explain the MVR/LIGHT route, build a static release, run the Next source server, wire the optional source indexer, rebrand the client, or prepare a public source release. Always prefer the easiest MVR/LIGHT path first and keep the release source-only.
+description: Run, verify, publish, or troubleshoot the FastPoker standalone source-code frontend. Use when an agent is asked to set up the repo, explain the MVR/LIGHT route, build a static release, run the Next source server, wire the FULL source indexer, rebrand the client, or prepare a public source release. Always prefer the easiest MVR/LIGHT path first and keep the release source-only.
 ---
 
 # FastPoker Standalone Setup
@@ -43,7 +43,19 @@ npm run build
 PORT=3005 npm start
 ```
 
-Optional source indexer:
+Hosted Node RPC setup:
+
+```bash
+NEXT_PUBLIC_L1_RPC_URL=/rpc
+NEXT_PUBLIC_L1_WS_URL=wss://your-provider-ws.example
+L1_RPC=https://your-provider-rpc.example
+```
+
+This uses the operator's same-origin RPC proxy, so normal visitors do not need to
+bring their own RPC. Do not put a private provider URL/key directly in
+`NEXT_PUBLIC_L1_RPC_URL` for a public build.
+
+FULL source indexer:
 
 ```bash
 cd ../Indexer
@@ -58,13 +70,19 @@ live push if set before building.
 ## Configuration Rules
 
 - Blank `.env.local` is valid for MVR: mainnet, free public RPC pool, keyless TEE auth.
-- Recommend a keyed `NEXT_PUBLIC_L1_RPC_URL` and `NEXT_PUBLIC_L1_WS_URL` before public traffic.
+- For static/LIGHT public traffic, recommend a capable browser-reachable RPC or
+  let users set one in-app. For hosted Node traffic, prefer
+  `NEXT_PUBLIC_L1_RPC_URL=/rpc` plus server-side `L1_RPC`.
 - Static export has no route handlers. It cannot rely on `/api/*`, `/rpc`, MongoDB,
   local files, or server-only secrets.
 - Node relay routes may use `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`,
   `TEE_API_KEY`, and `APP_ORIGIN`. They must never sign player wallet actions.
-- The optional indexer is read-only and needs MongoDB, a keyed RPC, and Helius
-  LaserStream for production-quality live data.
+- Privy is disabled by default. It requires `NEXT_PUBLIC_PRIVY_APP_ID` plus
+  `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email, Google, X, and Apple buttons
+  each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
+- The indexer is read-only and required for FULL indexed read parity. It needs
+  MongoDB, a paid/dedicated RPC, and Helius LaserStream or equivalent Geyser
+  streaming for production-quality live data.
 - FULL cash table listing uses `/api/tables/list`; with `INDEXER_BASE_URL` it reads
   the indexer's raw table cache first, then falls back to direct server RPC scans.
 - `NEXT_PUBLIC_*` values are baked into the browser bundle at build time; rebuild
@@ -95,7 +113,7 @@ keypair JSON, wallet files, logs, or generated NFT art.
 
 - Mainnet fund-path smoke test is required before claiming cash flows are certified:
   create cash table, sit, play one hand, cash out, plus SNG join/play.
-- Optional indexer must be tested with the operator's real MongoDB, RPC, and
+- FULL indexer must be tested with the operator's real MongoDB, RPC, and
   LaserStream credentials.
 - Rebrand before public release. MIT covers the code, not the original FastPoker
   name, logos, token marks, or legal copy.

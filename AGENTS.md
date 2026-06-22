@@ -35,7 +35,18 @@ npm run build
 PORT=3005 npm start
 ```
 
-Optional indexer from source:
+Hosted Node RPC setup:
+
+```bash
+NEXT_PUBLIC_L1_RPC_URL=/rpc
+NEXT_PUBLIC_L1_WS_URL=wss://your-provider-ws.example
+L1_RPC=https://your-provider-rpc.example
+```
+
+This makes normal visitors use the operator's same-origin RPC proxy. Do not bake a
+private provider key into `NEXT_PUBLIC_L1_RPC_URL`.
+
+FULL indexer from source:
 
 ```bash
 cd ../Indexer
@@ -54,6 +65,11 @@ live push and must be set before building if used.
 - Keep node relay routes explicit. They may use `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`,
   `TEE_RPC`, `TEE_API_KEY`, and `APP_ORIGIN`, but they must not custody player wallets
   or sign player actions.
+- Keep public-source auth wallet-only by default. Privy requires both
+  `NEXT_PUBLIC_PRIVY_APP_ID` and `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email,
+  Google, X, and Apple buttons require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flags.
+- Treat FULL as Node server plus the source indexer. Node server without the indexer
+  is hosted relay/RPC mode, not full indexed read parity.
 - Keep secrets out of source. Never commit `.env`, `.env.local`, keypair JSON, wallet
   files, or generated build output.
 - Prefer source setup instructions over infrastructure opinions. Users can run the
@@ -84,5 +100,5 @@ npm run typecheck
 - Mainnet fund-path smoke test is still required before claiming cash flows are
   production-certified: create cash table, sit, play one hand, cash out, plus SNG
   join/play.
-- Optional indexer must be tested with the operator's real MongoDB, RPC, and
+- FULL indexer must be tested with the operator's real MongoDB, RPC, and
   LaserStream credentials.

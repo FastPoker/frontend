@@ -16,9 +16,19 @@ npm run dev
 
 Open `http://localhost:3005`.
 
-Blank `.env.local` values are valid. The app defaults to mainnet, a rotating free
-public RPC pool, and keyless MagicBlock TEE auth. For a public deployment, set
-`NEXT_PUBLIC_L1_RPC_URL` and `NEXT_PUBLIC_L1_WS_URL` to your own RPC provider.
+Blank `.env.local` values are valid for local MVR. The app defaults to mainnet, a
+rotating free public RPC pool, and keyless MagicBlock TEE auth.
+
+For a hosted Node server where visitors should not bring their own RPC, use the
+operator RPC proxy setup in section 3 instead of exposing a provider key in
+`NEXT_PUBLIC_L1_RPC_URL`.
+
+Privy is disabled by default. With no Privy app id and no
+`NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`, the connect flow is wallet-only
+(Phantom / Backpack / Solflare). To add Privy, set your own app id, enable Privy,
+and opt into each visible method with `NEXT_PUBLIC_PRIVY_LOGIN_EMAIL`,
+`NEXT_PUBLIC_PRIVY_LOGIN_GOOGLE`, `NEXT_PUBLIC_PRIVY_LOGIN_X`, or
+`NEXT_PUBLIC_PRIVY_LOGIN_APPLE`.
 
 ## 2. Easiest Static Release
 
@@ -51,25 +61,34 @@ PORT=3005 npm start
 Set these for relay-capable node mode:
 
 ```bash
+NEXT_PUBLIC_L1_RPC_URL=/rpc
+NEXT_PUBLIC_L1_WS_URL=wss://your-mainnet-rpc-websocket.example
 L1_RPC=https://your-mainnet-rpc.example
 AUTHORITY_KEYPAIR_PATH=/absolute/path/to/operator-keypair.json
 TEE_RPC=https://mainnet-tee.magicblock.app
 APP_ORIGIN=https://your-public-origin.example
 ```
 
+`NEXT_PUBLIC_L1_RPC_URL=/rpc` tells the browser to use your same-origin Next route
+as an HTTP Solana RPC proxy. The real provider URL stays in server-side `L1_RPC`,
+so normal visitors do not need their own RPC and your provider key is not baked
+into browser JavaScript. `NEXT_PUBLIC_L1_WS_URL` still needs to be a browser-reachable
+WebSocket endpoint because `/rpc` is HTTP-only.
+
 The operator keypair is used only for protocol helper transactions and TEE helper
 auth. It never signs as a player wallet. Never commit `.env.local` or keypair JSON.
 
-## 4. Optional Source Indexer
+## 4. FULL Source Indexer
 
-The indexer is optional. Run it only if you want history, leaderboards, richer lobby
-stats, per-wallet jackpot attribution, and live WebSocket push.
+The Next node server can be useful without the indexer, but the FULL read
+experience requires the indexer. Run it when you want history, leaderboards,
+richer lobby stats, per-wallet jackpot attribution, and live WebSocket push.
 
 Prerequisites:
 
 - A MongoDB instance you run or rent.
-- A keyed mainnet RPC.
-- Helius LaserStream credentials for live indexed updates.
+- A paid/dedicated mainnet RPC. Do not use public/free Solana RPC.
+- Helius LaserStream or equivalent Geyser credentials for live indexed updates.
 
 Root web env:
 
@@ -78,9 +97,10 @@ INDEXER_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_INDEXER_WS_URL=ws://localhost:3001/ws
 ```
 
-`INDEXER_BASE_URL` powers server-side table lists/history. `NEXT_PUBLIC_INDEXER_WS_URL`
-is only for browser live push and must be set before building if you want it in
-the client bundle.
+`INDEXER_BASE_URL` powers server-side table lists/history and is not exposed to the
+browser. `NEXT_PUBLIC_INDEXER_WS_URL` is only for browser live push and must be set
+before building if you want it in the client bundle. The indexer RPC is server-side;
+end users never provide it.
 
 The indexer is a separate package (this release ships it alongside the frontend;
 run it from wherever you keep it — the directory layout doesn't matter). In the
@@ -133,7 +153,7 @@ npm run build
 npm run build:static
 ```
 
-If you ship the optional indexer, from the indexer package:
+For FULL source mode, from the indexer package:
 
 ```bash
 npm ci
@@ -158,4 +178,4 @@ public/nfts/
 
 The client source release should include `package.json`, `package-lock.json`, `src/`,
 `public/`, `scripts/`, and the docs. Ship `Indexer` as its own source
-package when you want the optional indexer.
+package for FULL indexed read parity.

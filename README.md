@@ -20,9 +20,11 @@ infrastructure they prefer.
   route handlers run in this profile.
 - **Node server** - `npm run build && npm start` runs the same app with Next route
   handlers for same-origin `/rpc`, token metadata/history helpers, process-local
-  show-cards/player-notes, and cash/SNG relay APIs.
-- **FULL source mode** - run the Next node server plus the separate
-  `Indexer` source package and your own MongoDB. This adds history,
+  show-cards/player-notes, and cash/SNG relay APIs. A hosted Node server can use
+  the operator's private `L1_RPC` so normal users do not need to configure their
+  own RPC.
+- **FULL source mode** - run the Next node server plus the separate `Indexer`
+  source package and your own MongoDB. This is the full read experience: history,
   leaderboards, richer lobby stats, per-wallet jackpot attribution, and live
   WebSocket push.
 For exact commands, see [SETUP.md](./SETUP.md). For architecture, feature parity,
@@ -60,28 +62,33 @@ npm run dev
 
 Open `http://localhost:3005`.
 
-Blank env is coherent out of the box: mainnet, the built-in free public RPC pool,
-and keyless MagicBlock TEE auth. Set your own RPC for reliability before public
-traffic.
+Blank env is coherent out of the box for local MVR: mainnet, the built-in free
+public RPC pool, and keyless MagicBlock TEE auth. For a hosted public Node server,
+set server-side `L1_RPC` and build with `NEXT_PUBLIC_L1_RPC_URL=/rpc` so visitors
+use your same-origin RPC proxy instead of bringing their own endpoint.
 
 ## Configuration
 
 See `.env.example` for the common LIGHT and node-server settings:
 
 - `NEXT_PUBLIC_SOLANA_CLUSTER` - `mainnet` or `devnet`.
-- `NEXT_PUBLIC_L1_RPC_URL` / `NEXT_PUBLIC_L1_WS_URL` - your browser RPC.
+- `NEXT_PUBLIC_L1_RPC_URL` / `NEXT_PUBLIC_L1_WS_URL` - browser RPC settings.
+  For hosted Node mode, set `NEXT_PUBLIC_L1_RPC_URL=/rpc` and provide
+  `NEXT_PUBLIC_L1_WS_URL=wss://...` from your provider.
 - `NEXT_PUBLIC_DEFAULT_TEE_RPC` / `_WS` - MagicBlock TEE endpoints.
 - `NEXT_PUBLIC_TEE_API_KEY` - optional; keyless works, blank by default.
-- `NEXT_PUBLIC_PRIVY_APP_ID` - optional; use your own Privy app id only.
+- Privy is off by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
+  `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable it; email, Google, X, and
+  Apple login buttons each have their own `NEXT_PUBLIC_PRIVY_LOGIN_*` opt-in flag.
 - `NEXT_PUBLIC_INDEXER_WS_URL` - optional browser WebSocket URL for the source
   indexer.
 - `L1_RPC` or `L1_RPC_PROXY_UPSTREAM` - server-side RPC for node relay routes.
 - `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN` -
   required only for node relay routes.
 
-For the optional source indexer, run the separate `Indexer` package
-(wherever you keep it). The client needs `INDEXER_BASE_URL` for server-side table
-lists/history and `NEXT_PUBLIC_INDEXER_WS_URL` only for browser WebSocket push.
+For the FULL read experience, run the separate `Indexer` package (wherever you
+keep it). The client needs `INDEXER_BASE_URL` for server-side table lists/history
+and `NEXT_PUBLIC_INDEXER_WS_URL` only for browser WebSocket push.
 
 ## Static LIGHT build
 
@@ -98,14 +105,20 @@ at build time.
 ## Source FULL mode
 
 FULL mode is not a different client package. It is the client source plus the
-separate indexer source running as normal Node processes:
+separate indexer source running as normal Node processes. The indexer is required
+for FULL history/stats/live-push parity; the Next node server alone is still a
+valid hosted relay/RPC mode, but it is not the full indexed read experience.
 
 1. Root Next app: `npm run build && PORT=3005 npm start`.
-2. Optional read-side indexer: run `npm ci && npm run start` in the `Indexer` package.
+2. Read-side indexer: run `npm ci && npm run start` in the `Indexer` package.
 
-You provide MongoDB yourself, plus a keyed mainnet RPC and Helius LaserStream
-credentials if you want live indexed history at production quality. The indexer
-remains read-only; it never holds keys or signs transactions.
+The web server and indexer both need server-side RPC access. They may share the
+same provider account only if your quota can support both workloads. End users do
+not need to provide RPCs when you host the Node server with `L1_RPC` and
+`NEXT_PUBLIC_L1_RPC_URL=/rpc`; they will use your same-origin proxy for HTTP RPC
+calls. The indexer still needs MongoDB, a paid/dedicated mainnet RPC, and
+LaserStream/Geyser credentials for production-quality live indexed history. The
+indexer remains read-only; it never holds keys or signs transactions.
 
 The one wiring rule:
 
@@ -133,7 +146,7 @@ npm run build
 npm run build:static
 ```
 
-If you ship the optional indexer, also run, in the `Indexer` package:
+For FULL source mode, also run this in the `Indexer` package:
 
 ```bash
 npm ci

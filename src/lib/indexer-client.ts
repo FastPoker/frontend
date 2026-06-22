@@ -4,7 +4,7 @@ import { ANCHOR_PROGRAM_ID } from './constants';
 /**
  * Server-side helpers for calling the local indexer service.
  *
- * The optional indexer runs out-of-process (Indexer, port 3001) and owns
+ * The source indexer runs out-of-process (Indexer, port 3001) and owns
  * discovery of FastPoker tables. API routes that previously did their own
  * getProgramAccounts scans should prefer these helpers — each indexer call
  * replaces ~17k Helius credits with a single HTTP request + one batched

@@ -5,14 +5,14 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useStandardWallets, useWallets as useConnectedSolanaWallets } from '@privy-io/react-auth/solana';
 import { getWallets } from '@wallet-standard/app';
+import { PRIVY_AUTH_ENABLED } from '@/lib/privy-config';
 
-const PRIVY_ENABLED = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 const DEBUG = true;
 const log = (...args: unknown[]) => { if (DEBUG) console.log('[PrivyBridge]', ...args); };
 const warn = (...args: unknown[]) => { if (DEBUG) console.warn('[PrivyBridge]', ...args); };
 
 export function PrivyWalletAdapterBridge() {
-  if (!PRIVY_ENABLED) return null;
+  if (!PRIVY_AUTH_ENABLED) return null;
   return <Bridge />;
 }
 

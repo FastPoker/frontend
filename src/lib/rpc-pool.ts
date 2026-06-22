@@ -39,14 +39,14 @@ export function getPublicPool(): string[] {
 }
 
 /**
- * True when no single RPC is configured (so we use the pool). Precedence:
- * frontend localStorage (user) > host build env > pool. getEffectiveRpcUrl()
- * already applies that order, so a UI-set RPC supersedes the server config.
+ * True when no single RPC is configured (so we use the pool), or when the user
+ * explicitly selected the "pool" sentinel. An explicit same-origin `/rpc`
+ * build config is a real operator-hosted endpoint and must not be treated as
+ * pool.
  */
 export function shouldUsePool(): boolean {
   const byo = getEffectiveRpcUrl();
-  // '/rpc' is the old same-origin proxy default (no backend in standalone) → pool.
-  return !byo || byo === '/rpc' || byo.toLowerCase() === 'pool';
+  return !byo || byo.toLowerCase() === 'pool';
 }
 
 // Sticky index: once an endpoint works we keep using it until it fails.

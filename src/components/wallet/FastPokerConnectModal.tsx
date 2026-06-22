@@ -3,6 +3,13 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 import { IS_MAINNET } from '@/lib/constants';
+import {
+  PRIVY_APPLE_ENABLED,
+  PRIVY_EMAIL_ENABLED,
+  PRIVY_GOOGLE_ENABLED,
+  PRIVY_HAS_VISIBLE_LOGIN,
+  PRIVY_X_ENABLED,
+} from '@/lib/privy-config';
 
 interface ConnectModalCtx {
   open: () => void;
@@ -59,6 +66,14 @@ function XMono() {
   );
 }
 
+function AppleMark() {
+  return (
+    <div className="w-9 h-9 rounded-sm flex items-center justify-center font-display text-lg" style={{ background: '#f5f1e6', color: '#0a0d10' }}>
+      
+    </div>
+  );
+}
+
 function Spinner() {
   return (
     <span
@@ -73,7 +88,7 @@ function FastPokerConnectModal({ open, onClose }: { open: boolean; onClose: () =
   // Pending login method. Disables every auth button and shows a spinner the
   // instant one is clicked, so it can't be re-clicked or look idle while Privy
   // spins up its own flow.
-  const [busy, setBusy] = useState<null | 'email' | 'google' | 'twitter' | 'wallet'>(null);
+  const [busy, setBusy] = useState<null | 'email' | 'google' | 'twitter' | 'apple' | 'wallet'>(null);
 
   // Auto-close on successful connection.
   useEffect(() => {
@@ -95,7 +110,7 @@ function FastPokerConnectModal({ open, onClose }: { open: boolean; onClose: () =
   useEffect(() => { if (!open || w.isConnected) setBusy(null); }, [open, w.isConnected]);
 
   const run = useCallback(
-    async (method: 'email' | 'google' | 'twitter' | 'wallet', fn: () => Promise<void> | void) => {
+    async (method: 'email' | 'google' | 'twitter' | 'apple' | 'wallet', fn: () => Promise<void> | void) => {
       if (busy || !w.isReady) return;
       setBusy(method);
       // CRITICAL (iOS): call fn() SYNCHRONOUSLY within the click gesture. The
@@ -124,6 +139,7 @@ function FastPokerConnectModal({ open, onClose }: { open: boolean; onClose: () =
     w.source === 'privy-embedded' ? 'Privy · embedded' :
     w.source === 'privy-external' ? 'Privy · external' :
     w.source === 'wallet-adapter' ? 'Wallet adapter' : null;
+  const hasSocialLogin = PRIVY_GOOGLE_ENABLED || PRIVY_X_ENABLED || PRIVY_APPLE_ENABLED;
 
   return (
     <div
@@ -199,7 +215,13 @@ function FastPokerConnectModal({ open, onClose }: { open: boolean; onClose: () =
                   {w.isConnected ? 'You’re in' : 'Take a seat'}
                 </div>
                 <div className="font-mono text-[11px] text-boneDim/65 mt-1">
-                  {w.isConnected ? sourceLabel : busy ? 'Connecting…' : w.isReady ? 'Sign in to start playing.' : 'Loading…'}
+                  {w.isConnected
+                    ? sourceLabel
+                    : busy
+                      ? 'Connecting…'
+                      : w.isReady
+                        ? (PRIVY_HAS_VISIBLE_LOGIN ? 'Sign in to start playing.' : 'Connect a Solana wallet to start playing.')
+                        : 'Loading…'}
                 </div>
               </div>
               <button
@@ -230,38 +252,71 @@ function FastPokerConnectModal({ open, onClose }: { open: boolean; onClose: () =
                     <div className="font-mono text-[10px] text-orange/85 mt-1 tracking-wider tabular-nums break-all">{shortAddr(w.address)}</div>
                   </div>
                 </div>
-              ) : (
+              ) : PRIVY_HAS_VISIBLE_LOGIN ? (
                 <>
+                  {PRIVY_EMAIL_ENABLED && (
+                    <button
+                      disabled={!w.isReady || busy !== null}
+                      onClick={() => run('email', () => w.loginEmail())}
+                      className="btn-orange w-full h-11 rounded-sm font-mono text-[11px] tracking-[0.20em] uppercase disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                      style={{ borderRadius: '4px' }}
+                    >
+                      {busy === 'email' ? (<><Spinner /> Connecting…</>) : 'Continue with email'}
+                    </button>
+                  )}
+
+                  {PRIVY_EMAIL_ENABLED && hasSocialLogin && (
+                    <div className="flex items-center gap-3 my-1">
+                      <div className="flex-1 h-px bg-orange/12" />
+                      <span className="font-mono text-[9px] tracking-[0.22em] text-boneDim/40">OR</span>
+                      <div className="flex-1 h-px bg-orange/12" />
+                    </div>
+                  )}
+
+                  {hasSocialLogin && (
+                    <div className="flex items-center justify-center gap-3">
+                      {PRIVY_GOOGLE_ENABLED && (
+                        <button disabled={!w.isReady || busy !== null} onClick={() => run('google', () => w.loginSocial('google'))} aria-label="Continue with Google" className="relative disabled:opacity-50 disabled:cursor-not-allowed">
+                          <GoogleMark />
+                          {busy === 'google' && <span className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/45 text-bone"><Spinner /></span>}
+                        </button>
+                      )}
+                      {PRIVY_X_ENABLED && (
+                        <button disabled={!w.isReady || busy !== null} onClick={() => run('twitter', () => w.loginSocial('twitter'))} aria-label="Continue with X" className="relative disabled:opacity-50 disabled:cursor-not-allowed">
+                          <XMono />
+                          {busy === 'twitter' && <span className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/45 text-bone"><Spinner /></span>}
+                        </button>
+                      )}
+                      {PRIVY_APPLE_ENABLED && (
+                        <button disabled={!w.isReady || busy !== null} onClick={() => run('apple', () => w.loginSocial('apple'))} aria-label="Continue with Apple" className="relative disabled:opacity-50 disabled:cursor-not-allowed">
+                          <AppleMark />
+                          {busy === 'apple' && <span className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/45 text-bone"><Spinner /></span>}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div
+                  className="rounded-sm p-4"
+                  style={{ background: 'rgba(7,9,11,0.55)', border: '1px solid rgba(242,106,31,0.12)' }}
+                >
                   <button
                     disabled={!w.isReady || busy !== null}
-                    onClick={() => run('email', () => w.loginEmail())}
+                    onClick={() => run('wallet', () => w.openExternalWalletModal())}
                     className="btn-orange w-full h-11 rounded-sm font-mono text-[11px] tracking-[0.20em] uppercase disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                     style={{ borderRadius: '4px' }}
                   >
-                    {busy === 'email' ? (<><Spinner /> Connecting…</>) : 'Continue with email'}
+                    {busy === 'wallet' ? (<><Spinner /> Opening…</>) : 'Connect wallet'}
                   </button>
-
-                  <div className="flex items-center gap-3 my-1">
-                    <div className="flex-1 h-px bg-orange/12" />
-                    <span className="font-mono text-[9px] tracking-[0.22em] text-boneDim/40">OR</span>
-                    <div className="flex-1 h-px bg-orange/12" />
+                  <div className="mt-3 font-mono text-[10px] text-boneDim/55 leading-relaxed text-center">
+                    Phantom · Backpack · Solflare
                   </div>
-
-                  <div className="flex items-center justify-center gap-3">
-                    <button disabled={!w.isReady || busy !== null} onClick={() => run('google', () => w.loginSocial('google'))} aria-label="Continue with Google" className="relative disabled:opacity-50 disabled:cursor-not-allowed">
-                      <GoogleMark />
-                      {busy === 'google' && <span className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/45 text-bone"><Spinner /></span>}
-                    </button>
-                    <button disabled={!w.isReady || busy !== null} onClick={() => run('twitter', () => w.loginSocial('twitter'))} aria-label="Continue with X" className="relative disabled:opacity-50 disabled:cursor-not-allowed">
-                      <XMono />
-                      {busy === 'twitter' && <span className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/45 text-bone"><Spinner /></span>}
-                    </button>
-                  </div>
-                </>
+                </div>
               )}
             </div>
 
-            {!w.isConnected && (
+            {!w.isConnected && PRIVY_HAS_VISIBLE_LOGIN && (
               <div className="pt-4 mt-4 hairline-t flex items-center justify-between font-mono text-[10px] tracking-wider text-boneDim/55">
                 <span>Already on Solana?</span>
                 <button disabled={busy !== null} onClick={() => run('wallet', () => w.openExternalWalletModal())} className="text-orange/85 hover:text-orange disabled:opacity-50 disabled:cursor-not-allowed">{busy === 'wallet' ? 'Opening…' : 'Use a wallet →'}</button>

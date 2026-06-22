@@ -8,6 +8,13 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { IS_MAINNET } from '@/lib/constants';
 import { setHeadlessSigner } from '@/lib/funds-confirm-suppress';
+import {
+  PRIVY_AUTH_ENABLED,
+  PRIVY_EMAIL_ENABLED,
+  PRIVY_GOOGLE_ENABLED,
+  PRIVY_X_ENABLED,
+  PRIVY_APPLE_ENABLED,
+} from '@/lib/privy-config';
 
 export type WalletSource = 'wallet-adapter' | 'privy-embedded' | 'privy-external' | null;
 
@@ -40,12 +47,10 @@ export interface UnifiedWallet {
   signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
-const PRIVY_ENABLED = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-
 // Privy's hooks only work when a <PrivyProvider> is mounted — and providers.tsx
-// only mounts it when NEXT_PUBLIC_PRIVY_APP_ID is set. Calling useSolanaWallets()
+// only mounts it when Privy auth is explicitly enabled. Calling useSolanaWallets()
 // without that provider reads a null context and throws ("Cannot read
-// properties of null (reading 'connectors')"). PRIVY_ENABLED is a build-time
+// properties of null (reading 'connectors')"). PRIVY_AUTH_ENABLED is a build-time
 // constant, so selecting the variant at module scope keeps hook order identical
 // across every render (React-safe) while never calling Privy hooks when disabled.
 type PrivyState = {
@@ -63,7 +68,7 @@ function usePrivyStateDisabled(): PrivyState {
   return { privy: null, privyWallet: undefined };
 }
 
-const usePrivyState: () => PrivyState = PRIVY_ENABLED ? usePrivyStateEnabled : usePrivyStateDisabled;
+const usePrivyState: () => PrivyState = PRIVY_AUTH_ENABLED ? usePrivyStateEnabled : usePrivyStateDisabled;
 
 export function useUnifiedWallet(): UnifiedWallet {
   const wa = useWallet();
@@ -76,7 +81,7 @@ export function useUnifiedWallet(): UnifiedWallet {
 
   const source: WalletSource = useMemo(() => {
     if (wa.connected && wa.publicKey) return 'wallet-adapter';
-    if (PRIVY_ENABLED && privy?.authenticated && privyWallet) {
+    if (PRIVY_AUTH_ENABLED && privy?.authenticated && privyWallet) {
       return isPrivyEmbedded ? 'privy-embedded' : 'privy-external';
     }
     return null;
@@ -101,7 +106,7 @@ export function useUnifiedWallet(): UnifiedWallet {
     return null;
   }, [source, wa.publicKey, privyWallet?.address]);
 
-  const isReady = PRIVY_ENABLED ? !!privy?.ready : true;
+  const isReady = PRIVY_AUTH_ENABLED ? !!privy?.ready : true;
   const isConnected = source !== null && !!publicKey;
 
   // Privy's privyWallet (and the wallet-adapter object) get a fresh identity on
@@ -114,20 +119,25 @@ export function useUnifiedWallet(): UnifiedWallet {
   const publicKeyRef = useRef(publicKey); publicKeyRef.current = publicKey;
 
   const loginEmail = useCallback(() => {
-    if (!PRIVY_ENABLED) return;
+    if (!PRIVY_EMAIL_ENABLED) return;
     return privy?.login({ loginMethods: ['email'] } as any);
   }, [privy]);
 
   const loginSocial = useCallback(
     (provider: 'google' | 'apple' | 'twitter' | 'discord') => {
-      if (!PRIVY_ENABLED) return;
+      if (
+        (provider === 'google' && !PRIVY_GOOGLE_ENABLED) ||
+        (provider === 'twitter' && !PRIVY_X_ENABLED) ||
+        (provider === 'apple' && !PRIVY_APPLE_ENABLED) ||
+        provider === 'discord'
+      ) return;
       return privy?.login({ loginMethods: [provider] } as any);
     },
     [privy]
   );
 
   const loginWallet = useCallback(() => {
-    if (!PRIVY_ENABLED) {
+    if (!PRIVY_AUTH_ENABLED) {
       setWalletModalVisible(true);
       return;
     }
@@ -142,7 +152,7 @@ export function useUnifiedWallet(): UnifiedWallet {
     if (wa.connected) {
       try { await wa.disconnect(); } catch { /* ignore */ }
     }
-    if (PRIVY_ENABLED && privy?.authenticated) {
+    if (PRIVY_AUTH_ENABLED && privy?.authenticated) {
       try { await privy.logout(); } catch { /* ignore */ }
     }
   }, [wa, privy]);

@@ -1,10 +1,10 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Connection } from '@solana/web3.js';
 import { useFundWallet } from '@privy-io/react-auth/solana';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
-import { makeL1Connection, L1_RPC, IS_MAINNET } from '@/lib/constants';
+import { makeL1Connection, IS_MAINNET } from '@/lib/constants';
+import { PRIVY_AUTH_ENABLED } from '@/lib/privy-config';
 
 interface OpenArgs {
   reason?: string;
@@ -73,7 +73,18 @@ export function useFundsErrorHandler() {
   );
 }
 
-const PRIVY_ENABLED = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+type PrivyFundHook = ReturnType<typeof useFundWallet> | null;
+
+function usePrivyFundHookEnabled(): PrivyFundHook {
+  return useFundWallet();
+}
+
+function usePrivyFundHookDisabled(): PrivyFundHook {
+  return null;
+}
+
+const usePrivyFundHook: () => PrivyFundHook =
+  PRIVY_AUTH_ENABLED ? usePrivyFundHookEnabled : usePrivyFundHookDisabled;
 
 export function InsufficientFundsProvider({ children }: { children: React.ReactNode }) {
   const [args, setArgs] = useState<OpenArgs | null>(null);
@@ -89,7 +100,7 @@ export function InsufficientFundsProvider({ children }: { children: React.ReactN
 
 function InsufficientFundsModal({ args, onClose }: { args: OpenArgs; onClose: () => void }) {
   const w = useUnifiedWallet();
-  const fundHook = PRIVY_ENABLED ? useFundWallet() : null;
+  const fundHook = usePrivyFundHook();
   const [copied, setCopied] = useState(false);
   const [liveBalance, setLiveBalance] = useState<number | undefined>(args.have);
   const address = args.address ?? w.address ?? '';
@@ -100,12 +111,6 @@ function InsufficientFundsModal({ args, onClose }: { args: OpenArgs; onClose: ()
     if (!address) return;
     let cancelled = false;
     const conn = makeL1Connection();
-    const tick = async () => {
-      try {
-        const lamports = await conn.getBalance(address as any, 'confirmed').catch(() => null) as any;
-        // getBalance accepts PublicKey, but we have a base58 string — wrap.
-      } catch { /* ignore */ }
-    };
     let id: ReturnType<typeof setInterval> | null = null;
     (async () => {
       const { PublicKey } = await import('@solana/web3.js');

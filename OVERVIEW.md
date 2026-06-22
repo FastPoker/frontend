@@ -23,8 +23,8 @@ Run profiles, same source tree:
 | Profile | What it is | Backend | Best for |
 |---|---|---|---|
 | **MVR / LIGHT** | Static client-side app on the free public RPC pool | none | easiest source run and static release |
-| **Node server** | `next start` plus route handlers | operator keypair + server RPC | self-hosted relay/API surface |
-| **FULL source mode** | Node server plus separate optional `Indexer` package | relays + indexer + MongoDB | history, leaderboards, stats, live push |
+| **Node server** | `next start` plus route handlers | operator keypair + server RPC | hosted relay/API/RPC surface |
+| **FULL source mode** | Node server plus separate `Indexer` package | relays + indexer + MongoDB | history, leaderboards, stats, live push |
 
 Everything a player does as a player - create a table, join, sit, bet, claim, leave -
 is an on-chain instruction signed by their own wallet. Node/FULL relays only sign
@@ -46,8 +46,10 @@ Browser
 
 - **Client-side:** UI, transaction building, wallet signing, polling, and WebSocket
   reads. Runs in the visitor's browser.
-- **RPC:** operator supplied. Blank config uses a rotating free public pool; serious
-  public traffic should use a keyed RPC.
+- **RPC:** operator supplied for hosted/node deployments. Blank static/MVR config
+  uses a rotating free public pool; serious public traffic should use either a
+  same-origin `/rpc` proxy backed by server-side `L1_RPC`, or a browser-visible
+  RPC endpoint users/operators knowingly provide.
 - **TEE:** trusted game logic for shuffle/deal/hidden cards. LIGHT uses player
   wallet-signed auth directly from the browser. Node mode can also mint operator
   read tokens from `/api/tee/token`.
@@ -65,7 +67,7 @@ Browser
 - **Discovery:** global table listing needs either the node table-list route with
   indexer/server RPC support or direct browser `getProgramAccounts`; free RPC
   providers often block the direct browser fallback.
-- **History/stats:** require the optional indexer.
+- **History/stats:** require the source indexer.
 - **Real-time:** client polling works everywhere; indexer adds WebSocket push.
 
 ---
@@ -102,30 +104,36 @@ PORT=3005 npm start
 Set `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`, and `APP_ORIGIN` when enabling
 relay-capable routes.
 
-### Optional FULL Source Mode
+### FULL Source Mode
 
-Run the root Next app plus the optional `Indexer` package (a separate
-source package — run it wherever you keep it):
+Run the root Next app plus the `Indexer` package (a separate source package — run
+it wherever you keep it):
 
 ```bash
 npm ci && npm run start   # from the Indexer package directory
 ```
 
-The indexer needs MongoDB, a keyed mainnet RPC, and Helius LaserStream for live
-production-quality updates. It listens on `INDEXER_PORT` (default 3001); point the
-web app's `INDEXER_BASE_URL` (server table lists/history) and optional
-`NEXT_PUBLIC_INDEXER_WS_URL` (browser live push, set before building) at wherever
-it's reachable - the on-disk layout doesn't matter.
+FULL read parity requires the indexer. The Next node server alone can host relay
+routes and an operator RPC proxy, but history, leaderboards, indexed stats, and
+live indexed push require the indexer.
+
+The indexer needs MongoDB, a paid/dedicated mainnet RPC, and Helius LaserStream or
+equivalent Geyser streaming for live production-quality updates. It listens on
+`INDEXER_PORT` (default 3001); point the web app's `INDEXER_BASE_URL` (server
+table lists/history) and optional `NEXT_PUBLIC_INDEXER_WS_URL` (browser live push,
+set before building) at wherever it's reachable - the on-disk layout doesn't matter.
 
 ---
 
 ## 4. Configuration
 
-Client env examples live in `.env.example`. The optional `Indexer`
-package has its own `.env.example`.
+Client env examples live in `.env.example`. The `Indexer` package has its own
+`.env.example`.
 
 - **Network/RPC:** `NEXT_PUBLIC_SOLANA_CLUSTER`, `NEXT_PUBLIC_L1_RPC_URL`,
   `NEXT_PUBLIC_L1_WS_URL`, `NEXT_PUBLIC_DEFAULT_TEE_RPC`, `NEXT_PUBLIC_DEFAULT_TEE_WS`.
+  For hosted Node mode, set `NEXT_PUBLIC_L1_RPC_URL=/rpc`, server-side `L1_RPC`,
+  and a browser-reachable `NEXT_PUBLIC_L1_WS_URL`.
 - **Node relays:** `L1_RPC` or `L1_RPC_PROXY_UPSTREAM`, `AUTHORITY_KEYPAIR_PATH`,
   `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN`.
 - **Branding:** `NEXT_PUBLIC_BRAND_*`, assets under `public/brand/`, and
@@ -135,10 +143,13 @@ package has its own `.env.example`.
 - **On-chain overrides:** `NEXT_PUBLIC_FASTPOKER_PROGRAM_ID`, `NEXT_PUBLIC_POKER_MINT`,
   `NEXT_PUBLIC_POOL_PDA`, `NEXT_PUBLIC_TREASURY`, `NEXT_PUBLIC_CRANK_PUBKEY`, and
   permission/registry/steel program ids.
-- **Privy:** `NEXT_PUBLIC_PRIVY_APP_ID`; blank means native web3 wallets only.
+- **Privy:** disabled by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
+  `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable Privy; email, Google, X, and
+  Apple login buttons each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
 - **Indexer wiring:** client root sets `INDEXER_BASE_URL` for server reads and
-  optional `NEXT_PUBLIC_INDEXER_WS_URL` for browser live push; `Indexer` owns `HELIUS_API_KEY`,
-  `RPC_URL`, `LASERSTREAM_ENDPOINT`, `PROGRAM_ID`, `MONGO_URI`, and `MONGO_DB`.
+  optional `NEXT_PUBLIC_INDEXER_WS_URL` for browser live push; `Indexer` owns
+  `HELIUS_API_KEY`, `RPC_URL`, `LASERSTREAM_ENDPOINT`, `PROGRAM_ID`, `MONGO_URI`,
+  and `MONGO_DB`. These are operator/server settings; users do not provide them.
 - **Build mode:** `NEXT_OUTPUT=export` only for `npm run build:static`; unset for
   normal source node builds.
 
@@ -192,7 +203,7 @@ operator fee; static export; MIT license and trademark docs.
    sequence, but it moves real funds through the TEE delegation flow and must be
    runtime-certified with a funded wallet: create table, sit, play one hand, cash out,
    plus SNG join/play.
-2. **Optional indexer live test.** Run with the operator's real MongoDB, RPC, and
+2. **FULL indexer live test.** Run with the operator's real MongoDB, RPC, and
    LaserStream credentials and verify history, lobby stats, jackpots, and WebSocket
    updates end-to-end.
 3. **Source release commit.** Commit and push the standalone source tree, including

@@ -23,10 +23,9 @@ import { ConnectModalProvider } from '@/components/wallet/FastPokerConnectModal'
 import { PrivyWalletAdapterBridge } from '@/components/wallet/PrivyWalletAdapterBridge';
 import { InsufficientFundsProvider } from '@/components/wallet/InsufficientFundsModal';
 import { ToastProvider } from '@/components/toast/ToastProvider';
+import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED, PRIVY_LOGIN_METHODS } from '@/lib/privy-config';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
-
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || '';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -168,13 +167,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </ConnectionProvider>
   );
 
-  if (!PRIVY_APP_ID) return tree;
+  if (!PRIVY_AUTH_ENABLED) return tree;
 
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ['email', 'google', 'twitter', 'wallet'],
+        loginMethods: PRIVY_LOGIN_METHODS as any,
         appearance: {
           theme: 'dark',
           accentColor: '#F26A1F',

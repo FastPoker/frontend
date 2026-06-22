@@ -45,7 +45,23 @@ Relay-capable node mode may use `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`,
 `TEE_API_KEY`, and `APP_ORIGIN`. These relays sign protocol helper transactions
 only. They must never sign player wallet actions or custody player funds.
 
-## Optional Indexer Path
+For a hosted public Node server, set:
+
+```bash
+NEXT_PUBLIC_L1_RPC_URL=/rpc
+NEXT_PUBLIC_L1_WS_URL=wss://your-provider-ws.example
+L1_RPC=https://your-provider-rpc.example
+```
+
+This makes visitors use the operator's same-origin RPC proxy for HTTP RPC calls,
+so normal users do not need to configure their own RPC.
+
+Privy is disabled by default. A public build should show wallet-only auth unless
+the operator sets both `NEXT_PUBLIC_PRIVY_APP_ID` and
+`NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`. Email, Google, X, and Apple buttons are
+separate opt-ins through `NEXT_PUBLIC_PRIVY_LOGIN_*` flags.
+
+## FULL Indexer Path
 
 The `Indexer` package is a separate source package — run it wherever it
 lives (its own directory), not a fixed relative path:
@@ -54,8 +70,9 @@ lives (its own directory), not a fixed relative path:
 npm ci && npm run start   # from the Indexer package directory
 ```
 
-The indexer is read-only and optional. It needs MongoDB, a keyed mainnet RPC, and
-Helius LaserStream for production-quality live data. Wire it by URL only:
+The indexer is read-only and required for FULL indexed read parity. It needs
+MongoDB, a paid/dedicated mainnet RPC, and Helius LaserStream or equivalent Geyser
+streaming for production-quality live data. Wire it by URL only:
 `INDEXER_BASE_URL` powers server-side table lists/history, and optional
 `NEXT_PUBLIC_INDEXER_WS_URL` powers browser live push if set before building.
 Point those URLs at wherever the indexer listens (`INDEXER_PORT`, default 3001).

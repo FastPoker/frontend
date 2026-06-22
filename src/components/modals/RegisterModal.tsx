@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { usePlayer } from '@/hooks/usePlayer';
 import { SolIcon } from '@/components/ui/TokenIcon';
+import { PRIVY_HAS_VISIBLE_LOGIN } from '@/lib/privy-config';
 
 export interface RegisterModalProps {
   open: boolean;
@@ -79,7 +80,7 @@ export function RegisterModal({ open, onClose, reason = null }: RegisterModalPro
 
   const title =
     step === 0
-      ? 'SIGN IN'
+      ? (PRIVY_HAS_VISIBLE_LOGIN ? 'SIGN IN' : 'CONNECT WALLET')
       : step === 1
         ? 'CREATE YOUR HANDLE'
         : step === 2
@@ -142,26 +143,23 @@ export function RegisterModal({ open, onClose, reason = null }: RegisterModalPro
             {step === 0 && (
               <>
                 <p className="text-sm text-boneDim leading-relaxed">
-                  Sign in with email, Google, Apple, X, or any Solana wallet. We don't store anything. Your account is your login.
+                  {PRIVY_HAS_VISIBLE_LOGIN
+                    ? "Sign in with an enabled account method or connect a Solana wallet. We don't store anything. Your account is your login."
+                    : "Connect a Solana wallet. We don't store anything. Your wallet is your login."}
                 </p>
                 <div className="mt-5">
-                  {/* Use the shared, iOS-hardened connect modal (same one lobby /
-                      ProfilePill / WaitlistForm use) — it offers Privy
-                      email/Google/Apple/X login (the only options iPhone Safari
-                      users have, since they have no extension wallet) and fires
-                      login synchronously inside the tap gesture so Safari doesn't
-                      block the OAuth popup. The bare WalletMultiButton listed
-                      only Wallet-Standard extensions → dead end on iOS Safari. */}
                   <button
                     type="button"
                     onClick={() => openConnect()}
                     className="btn-orange w-full font-mono tracking-[0.22em] text-[11px] font-bold py-3 rounded-sm"
                   >
-                    SIGN IN
+                    {PRIVY_HAS_VISIBLE_LOGIN ? 'SIGN IN' : 'CONNECT WALLET'}
                   </button>
                 </div>
                 <div className="mt-3 font-mono text-[10px] text-boneDim/55 leading-relaxed">
-                  Email · Google · Apple · X · or Phantom / Backpack / Solflare.
+                  {PRIVY_HAS_VISIBLE_LOGIN
+                    ? 'Enabled account methods · or Phantom / Backpack / Solflare.'
+                    : 'Phantom / Backpack / Solflare.'}
                 </div>
               </>
             )}
