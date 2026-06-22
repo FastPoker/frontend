@@ -15,6 +15,7 @@ Use these repo docs as source of truth:
 
 - `SETUP.md` for human setup commands.
 - `OVERVIEW.md` for architecture, feature parity, status, and release gates.
+- `AGENT_SETUP.md` for a copy-paste install runbook for coding agents.
 - `AGENTS.md` / `CLAUDE.md` for repo-local agent rules.
 
 ## Choose The Run Path
@@ -76,6 +77,8 @@ browser live push if set before building.
   `NEXT_PUBLIC_L1_RPC_URL=/rpc` plus server-side `L1_RPC`.
 - Static export has no route handlers. It cannot rely on `/api/*`, `/rpc`, MongoDB,
   local files, or server-only secrets.
+- MongoDB is only required for FULL indexed reads through the separate indexer.
+  MVR, static LIGHT, and frontend-only Node mode do not need a database.
 - Node relay routes may use `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`,
   `TEE_API_KEY`, and `APP_ORIGIN`. They must never sign player wallet actions.
 - Privy is disabled by default. It requires `NEXT_PUBLIC_PRIVY_APP_ID` plus

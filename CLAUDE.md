@@ -13,7 +13,8 @@ instructions. Users can run the source however they want. The supported paths ar
 - Optional read-side indexer from source
 
 Use `SETUP.md` for exact setup commands and `OVERVIEW.md` for architecture,
-feature parity, status, and release gates.
+feature parity, status, and release gates. Use `AGENT_SETUP.md` for a concise
+copy-paste install runbook.
 
 ## Fastest MVR Path
 
@@ -72,7 +73,9 @@ npm ci && npm run start   # from the Indexer package directory
 
 The indexer is read-only and required for FULL indexed read parity. It needs
 MongoDB, a paid/dedicated mainnet RPC, and stream credentials for production-quality
-live data. Wire it by URL only: `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
+live data. MongoDB is only required for FULL/indexer mode; MVR, static LIGHT, and
+frontend-only Node mode do not use a database. Wire it by URL only:
+`NEXT_PUBLIC_ENABLE_INDEXER=true` plus
 `INDEXER_BASE_URL` turns on indexed table/profile/history/jackpot/stat reads, and
 optional `NEXT_PUBLIC_INDEXER_WS_URL` powers browser live push if set before
 building. Point those URLs at wherever the indexer listens (`INDEXER_PORT`,

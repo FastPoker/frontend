@@ -11,6 +11,8 @@ or publish this standalone client.
   `npm run dev`, or `npm run build:static`.
 - Treat `SETUP.md` as the human setup source of truth and `OVERVIEW.md` as the
   architecture/status source of truth.
+- Use `AGENT_SETUP.md` when a user wants a copy-paste install runbook for Codex,
+  Claude, or another coding agent.
 
 ## Run Paths
 
@@ -63,6 +65,8 @@ optional browser live push and must be set before building if used.
 
 - Keep static LIGHT free of server-route requirements. Static export must not depend
   on `/api/*`, `/rpc`, local files, MongoDB, or private keys.
+- MongoDB is only required for FULL indexed reads through the separate indexer.
+  MVR, static LIGHT, and frontend-only Node mode do not need a database.
 - Keep node relay routes explicit. They may use `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`,
   `TEE_RPC`, `TEE_API_KEY`, and `APP_ORIGIN`, but they must not custody player wallets
   or sign player actions.

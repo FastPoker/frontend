@@ -4,7 +4,25 @@ This repo ships as source code. The easiest route is **MVR / LIGHT**: install
 dependencies, run the frontend, or export static files. No private backend,
 database, or keypair is required for that path.
 
-## 1. Easiest MVR Run
+## 1. Requirements
+
+Choose the smallest path that fits what you want to run:
+
+| Path | Requirements |
+| --- | --- |
+| MVR local dev | Node 20+ (`.nvmrc` currently pins 22), browser wallet |
+| Static LIGHT release | Node 20+ to build, any static host to serve `out/` |
+| Node server | Node 20+, a server/VM/process manager, paid/dedicated Solana RPC recommended for hosted traffic |
+| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, optional stream provider for production live updates |
+
+MongoDB is required only for FULL indexed reads because the indexer stores
+chain-derived tables, hands, player stats, jackpots, and leaderboards there.
+There is no SQLite mode in this release.
+
+Docker and IPFS are not part of the supported setup path. This is a source-code
+release: run it with Node, your preferred process manager, and your preferred host.
+
+## 2. Easiest MVR Run
 
 Use this when you just want to run the client locally and connect a wallet.
 
@@ -20,7 +38,7 @@ Blank `.env.local` values are valid for local MVR. The app defaults to mainnet, 
 rotating free public RPC pool, and keyless MagicBlock TEE auth.
 
 For a hosted Node server where visitors should not bring their own RPC, use the
-operator RPC proxy setup in section 3 instead of exposing a provider key in
+operator RPC proxy setup in section 4 instead of exposing a provider key in
 `NEXT_PUBLIC_L1_RPC_URL`.
 
 Privy is disabled by default. With no Privy app id and no
@@ -30,7 +48,7 @@ and opt into each visible method with `NEXT_PUBLIC_PRIVY_LOGIN_EMAIL`,
 `NEXT_PUBLIC_PRIVY_LOGIN_GOOGLE`, `NEXT_PUBLIC_PRIVY_LOGIN_X`, or
 `NEXT_PUBLIC_PRIVY_LOGIN_APPLE`.
 
-## 2. Easiest Static Release
+## 3. Easiest Static Release
 
 Use this when you want the smallest possible public artifact.
 
@@ -47,7 +65,7 @@ Static LIGHT has no server route handlers. It cannot run `/api/indexer`, `/rpc`,
 `/api/cash-game/*`, `/api/sitngos/ready`, or `/api/tee/token`. It can still build
 wallet-signed player transactions and talk directly to Solana RPC and the TEE.
 
-## 3. Node Server Source Run
+## 4. Node Server Source Run
 
 Use this when you want the Next route handlers as part of your own server process.
 
@@ -78,7 +96,7 @@ WebSocket endpoint because `/rpc` is HTTP-only.
 The operator keypair is used only for protocol helper transactions and TEE helper
 auth. It never signs as a player wallet. Never commit `.env.local` or keypair JSON.
 
-## 4. FULL Source Indexer
+## 5. FULL Source Indexer
 
 The Next node server can be useful without the indexer, but the FULL read
 experience requires the indexer. Run it when you want history, leaderboards,
@@ -87,6 +105,7 @@ richer lobby stats, per-wallet jackpot attribution, and live WebSocket push.
 Prerequisites:
 
 - A MongoDB instance you run or rent.
+- The indexer uses MongoDB only in this release. SQLite is not supported.
 - A paid/dedicated mainnet RPC. Do not use public/free Solana RPC.
 - A stream provider for production live indexed updates. The bundled adapter is
   LaserStream/Geyser-compatible, but the base `RPC_URL` is provider-neutral.
@@ -145,13 +164,19 @@ Then build or restart the root web app after `NEXT_PUBLIC_ENABLE_INDEXER` or
 `NEXT_PUBLIC_INDEXER_WS_URL` changes, because `NEXT_PUBLIC_*` values are baked into
 the browser bundle at build time.
 
-## 5. Rebrand Before Shipping
+## 6. Rebrand Before Shipping
 
 Set `NEXT_PUBLIC_BRAND_*` values in `.env.local`, update `public/brand/`, and replace
 the legal copy with your own Terms/Privacy/Consent text. The MIT license covers the
 code; the original FastPoker name, logos, and token marks are not yours to ship.
 
-## 6. Validation
+## 7. Agent-Assisted Setup
+
+If you want Codex, Claude, or another coding agent to install and verify the
+source release, point it at [AGENT_SETUP.md](./AGENT_SETUP.md). That file is a
+copy-paste runbook for MVR, static, Node server, and FULL indexer setup.
+
+## 8. Validation
 
 Run these before publishing source:
 
@@ -169,7 +194,7 @@ npm ci
 npm run typecheck
 ```
 
-## 7. What Not To Ship
+## 9. What Not To Ship
 
 Do not include:
 

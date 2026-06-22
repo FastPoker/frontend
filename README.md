@@ -10,8 +10,9 @@ yours to use; the *brand* is not. Rebrand before you ship. See
 [TRADEMARK.md](./TRADEMARK.md) and `src/lib/branding.ts`.
 
 This repo is intended to ship as source code. Operators run it with Node, a
-static host, a process manager, their own MongoDB, their own RPC provider, or any
-infrastructure they prefer.
+static host, a process manager, their own RPC provider, or any infrastructure
+they prefer. MongoDB is only required if you also run the separate indexer for
+FULL read features.
 
 ## Run profiles
 
@@ -27,9 +28,11 @@ infrastructure they prefer.
   source package and your own MongoDB. This is the full read experience: history,
   leaderboards, standalone profiles/achievements, richer lobby stats, per-wallet
   jackpot attribution, and live WebSocket push.
+
 For exact commands, see [SETUP.md](./SETUP.md). For architecture, feature parity,
 and release gates, see [OVERVIEW.md](./OVERVIEW.md). Agent setup guidance ships in
-[AGENTS.md](./AGENTS.md), [CLAUDE.md](./CLAUDE.md), and the portable skill at
+[AGENT_SETUP.md](./AGENT_SETUP.md), [AGENTS.md](./AGENTS.md),
+[CLAUDE.md](./CLAUDE.md), and the portable skill at
 [skills/fastpoker-frontend-public-setup/SKILL.md](./skills/fastpoker-frontend-public-setup/SKILL.md).
 
 ## What it does
@@ -67,6 +70,18 @@ public RPC pool, and keyless MagicBlock TEE auth. For a hosted public Node serve
 set server-side `L1_RPC` and build with `NEXT_PUBLIC_L1_RPC_URL=/rpc` so visitors
 use your same-origin RPC proxy instead of bringing their own endpoint.
 
+## Requirements By Mode
+
+| Mode | Required |
+| --- | --- |
+| MVR local | Node 20+, browser wallet |
+| Static LIGHT | Node 20+ to build, any static host to serve `out/` |
+| Node server | Node 20+, a server/VM/process manager, server-side Solana RPC for hosted traffic |
+| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, optional stream provider for production live updates |
+
+Docker and IPFS are not required by this source release. Use any host or process
+manager you prefer.
+
 ## Configuration
 
 See `.env.example` for the common LIGHT and node-server settings:
@@ -82,7 +97,7 @@ See `.env.example` for the common LIGHT and node-server settings:
   Apple login buttons each have their own `NEXT_PUBLIC_PRIVY_LOGIN_*` opt-in flag.
 - `NEXT_PUBLIC_ENABLE_PROFILES` and `NEXT_PUBLIC_ENABLE_ACHIEVEMENTS` - read-only
   public profile surfaces, enabled by default; set `0`/`false` to hide them.
-- `NEXT_PUBLIC_ENABLE_INDEXER` - browser-side indexed reads. Leave `false` unless
+- `NEXT_PUBLIC_ENABLE_INDEXER` - indexed frontend reads. Leave `false` unless
   `INDEXER_BASE_URL` points at your own running indexer.
 - `NEXT_PUBLIC_INDEXER_WS_URL` - optional browser WebSocket URL for the source
   indexer.
@@ -105,10 +120,9 @@ npm run build:static
 ```
 
 Upload `out/` anywhere. The static build has no route handlers, so it cannot use
-`/api/indexer`, `/rpc`, `/api/tables/list`, `/api/my-sng-tables`, or cash/SNG relay APIs. Users can
-still provide a capable RPC endpoint in-app for table discovery, and the app can
-point at an externally run indexer WebSocket if you set `NEXT_PUBLIC_INDEXER_WS_URL`
-at build time.
+`/api/indexer`, `/rpc`, `/api/tables/list`, `/api/my-sng-tables`, or cash/SNG
+relay APIs. Users can still provide a capable RPC endpoint in-app for table
+discovery.
 
 ## Source FULL mode
 
@@ -141,8 +155,9 @@ The one wiring rule:
 
 Cash table listing in FULL mode uses the web app's `/api/tables/list` route. That
 route reads the indexer's raw table cache first when `NEXT_PUBLIC_ENABLE_INDEXER=true`
-and `INDEXER_BASE_URL` is set, then falls back to direct RPC scans when the
-indexer is disabled, cold, unreachable, or no server RPC is configured.
+and `INDEXER_BASE_URL` is set. If the indexer is disabled, cold, or unreachable,
+the route falls back to direct RPC scans when the Node server has a configured
+server RPC.
 
 ## Release hygiene
 

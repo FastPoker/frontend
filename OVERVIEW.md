@@ -6,8 +6,8 @@ no proprietary fast.poker backend required, no database required for LIGHT, and 
 secrets shipped. You bring your own RPC.
 
 This repository ships as **source code**. Operators can run the source with Node,
-export static files, use their own process manager, run their own MongoDB, or
-point at infrastructure they already operate.
+export static files, use their own process manager, add MongoDB only for
+FULL/indexer mode, or point at infrastructure they already operate.
 
 ---
 
