@@ -54,10 +54,26 @@ function publish(next: WalletBalances) {
 
 async function readDirectSol(walletStr: string): Promise<WalletBalances | null> {
   try {
-    const { makeL1Connection } = await import('@/lib/constants');
+    const { makeL1Connection, PLAYER_ACCOUNT_OFFSETS } = await import('@/lib/constants');
+    const { getPlayerPda } = await import('@/lib/pda');
     const { PublicKey } = await import('@solana/web3.js');
-    const lamports = await makeL1Connection().getBalance(new PublicKey(walletStr));
-    return { ...snapshot, solBalance: lamports / 1e9, asOfMs: Date.now(), loading: false, errored: false };
+    const wallet = new PublicKey(walletStr);
+    const conn = makeL1Connection();
+    const [playerPda] = getPlayerPda(wallet);
+    const [lamports, playerInfo] = await Promise.all([
+      conn.getBalance(wallet),
+      conn.getAccountInfo(playerPda, 'confirmed').catch(() => null),
+    ]);
+    let xp = 0;
+    if (playerInfo && playerInfo.data.length >= PLAYER_ACCOUNT_OFFSETS.XP + 8) {
+      const view = new DataView(
+        playerInfo.data.buffer,
+        playerInfo.data.byteOffset + PLAYER_ACCOUNT_OFFSETS.XP,
+        8,
+      );
+      xp = Number(view.getBigUint64(0, true));
+    }
+    return { ...snapshot, solBalance: lamports / 1e9, xp, asOfMs: Date.now(), loading: false, errored: false };
   } catch {
     return null;
   }

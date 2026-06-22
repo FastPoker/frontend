@@ -10,7 +10,7 @@ import {
   type TableEntry,
 } from '@/lib/indexer-client';
 import { attachTokenDecimals } from '@/lib/mint-decimals';
-import { getBrokenTablesList } from '@/lib/broken-tables';
+import { getTableBlacklist } from '@/lib/table-blacklist';
 import { ANCHOR_PROGRAM_ID } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -251,10 +251,9 @@ async function refreshCacheInBackground() {
 
     await overlayDelegatedTableState(tables);
 
-    const brokenSet = new Set(getBrokenTablesList().map((t) => t.pubkey));
-    for (const t of tables) {
-      if (brokenSet.has(t.pubkey)) t.broken = true;
-    }
+    const tableBlacklist = getTableBlacklist();
+    const hiddenCount = tables.filter((t: any) => tableBlacklist.has(t.pubkey)).length;
+    tables = tables.filter((t: any) => !tableBlacklist.has(t.pubkey));
     if (l1) {
       try { await attachTokenDecimals(l1, tables); } catch {}
     }
@@ -267,8 +266,7 @@ async function refreshCacheInBackground() {
           tables,
           delegatedCount: delegatedAccounts.length,
           undelegatedCount: undelegatedAccounts.length,
-          brokenCount: tables.filter((t: any) => t.broken).length,
-          brokenTables: tables.filter((t: any) => t.broken).map((t: any) => ({ pubkey: t.pubkey, gameType: t.gameType, maxPlayers: t.maxPlayers })),
+          hiddenCount,
         },
         ts: Date.now(),
       };
@@ -397,19 +395,19 @@ export async function GET(request: Request) {
 
     ensureBackgroundRefresh();
     if (!responseCache) {
-      return NextResponse.json({ tables: [], delegatedCount: 0, undelegatedCount: 0, brokenCount: 0, loading: true });
+      return NextResponse.json({ tables: [], delegatedCount: 0, undelegatedCount: 0, hiddenCount: 0, loading: true });
     }
 
     const cashOnly = gameTypeFilter !== null && Number(gameTypeFilter) === 3;
-    let tables = responseCache.data.tables.filter((t: any) => !t.broken && (cashOnly ? true : t.isDelegated));
+    let tables = responseCache.data.tables.filter((t: any) => cashOnly ? true : t.isDelegated);
     if (gameTypeFilter !== null) {
       const gt = Number(gameTypeFilter);
       if (Number.isFinite(gt)) tables = tables.filter((t: any) => t.gameType === gt);
     }
     const paged = pageTables(tables, url);
     if (paged instanceof NextResponse) return paged;
-    const playersOnline = (responseCache.data.tables as Array<{ broken?: boolean; isDelegated?: boolean; currentPlayers?: number }>)
-      .filter((t) => !t.broken && t.isDelegated)
+    const playersOnline = (responseCache.data.tables as Array<{ isDelegated?: boolean; currentPlayers?: number }>)
+      .filter((t) => t.isDelegated)
       .reduce((sum, t) => sum + (t.currentPlayers || 0), 0);
     return NextResponse.json({
       ...responseCache.data,

@@ -3533,7 +3533,7 @@ export function Lobby(props: LobbyProps) {
             // WATCH = any SNG table delegated to the TEE (i.e. live on the ER).
             // No phase or seat-count filtering: if it's a delegated SNG, it's
             // watchable. /api/tables/list already returns only delegated,
-            // non-broken tables, so this is the full live-SNG set.
+            // visible tables after server-side blacklist filtering, so this is the full live-SNG set.
             if (t.pubkey && t.isDelegated) {
               live.push({ pubkey: t.pubkey, gameType: t.gameType ?? 0, currentPlayers: pl, maxPlayers: t.maxPlayers ?? 9, phase: t.phase ?? 0, smallBlind: t.smallBlind ?? 0, bigBlind: t.bigBlind ?? 0, tier: t.tier ?? 0 });
             }
