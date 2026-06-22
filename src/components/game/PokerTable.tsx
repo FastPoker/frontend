@@ -33,6 +33,7 @@ import { fpDebug, isFpDebugEnabled } from '@/lib/fp-debug';
 import { getAvatarById } from '@/lib/avatars';
 import { useTokenLogo } from '@/hooks/useTokenLogo';
 import { usePrices } from '@/hooks/usePrices';
+import { PROFILE_API_ENABLED } from '@/lib/feature-flags';
 import { calculateSngPoolUnrefined } from '@/lib/emission';
 import { Coins, Menu, Share2, Volume2, VolumeX, Lock, StickyNote, Link2 } from 'lucide-react';
 import { requestOpenSessionRenewModal } from '@/components/layout/SessionRenewModal';
@@ -4616,8 +4617,9 @@ export default function PokerTable({
   const playerPubkeys = useMemo(() => players.map(p => p.pubkey).sort().join(','), [players]);
   useEffect(() => {
     if (!players.length) return;
-    // Standalone: no /api/profile backend — table shows players by wallet only.
-    if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) return;
+    // Public source release ships no /api/profile backend; show wallets unless
+    // an operator explicitly adds and enables a compatible profile API.
+    if (!PROFILE_API_ENABLED) return;
     const pubkeys = players.map(p => p.pubkey);
     const fetchProfiles = () => {
       fetch('/api/profile', {
@@ -6297,7 +6299,7 @@ export default function PokerTable({
               // (which would dump the player on the cash lobby).
               onLobby={() => { closeOverlay(); router.push('/lobby?tab=sng'); }}
               onPlayAgain={() => { closeOverlay(); router.push('/lobby?tab=sng'); }}
-              onLeaveToEarn={() => { closeOverlay(); router.push('/earn'); }}
+              onLeaveToEarn={() => { closeOverlay(); router.push('/lobby?tab=sng'); }}
               onClaimRaw={canClaim ? handleClaimRaw : undefined}
               onClaimAndStake={canClaim ? handleClaimAndStake : undefined}
             />

@@ -1,0 +1,2 @@
+export const PROFILE_API_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PROFILES === '1';
+export const INTEGRITY_API_ENABLED = process.env.NEXT_PUBLIC_ENABLE_INTEGRITY === '1';

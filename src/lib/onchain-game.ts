@@ -1403,6 +1403,27 @@ export function buildAddWhitelistInstruction(
   });
 }
 
+export function buildRemoveWhitelistInstruction(
+  creator: PublicKey,
+  tablePda: PublicKey,
+  player: PublicKey,
+): TransactionInstruction {
+  const [whitelistPda] = getWhitelistPda(tablePda, player);
+  const data = Buffer.alloc(40);
+  DISCRIMINATORS.removeWhitelist.copy(data, 0);
+  player.toBuffer().copy(data, 8);
+
+  return new TransactionInstruction({
+    programId: ANCHOR_PROGRAM_ID,
+    keys: [
+      { pubkey: creator, isSigner: true, isWritable: true },
+      { pubkey: tablePda, isSigner: false, isWritable: false },
+      { pubkey: whitelistPda, isSigner: false, isWritable: true },
+    ],
+    data,
+  });
+}
+
 export function buildCreateGlobalEntropyPermission(payer: PublicKey): TransactionInstruction {
   const [globalEntropyPda] = getGlobalEntropyPda();
   const [permPda] = getPermissionPda(globalEntropyPda);

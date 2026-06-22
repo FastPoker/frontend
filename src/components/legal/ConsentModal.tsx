@@ -7,6 +7,7 @@
 // -service persistence (ed25519 + version hashes) is a separate backend piece,
 // not wired here yet.
 import { useEffect, useRef, useState } from 'react';
+import { BRAND } from '@/lib/branding';
 
 // "Scrolled to the bottom" tolerance. Generous on purpose: mobile browsers
 // report fractional scroll offsets and the body has bottom padding, so a tight
@@ -147,7 +148,8 @@ export function ConsentModal({
 }
 
 // ── Body content ─────────────────────────────────────────────────────────
-// Exact text from the Mainnet Beta Legal & Risk package (formal register).
+// Source-release beta consent copy. Operators should replace this with their own
+// jurisdiction-specific legal copy before public deployment.
 
 function Grp({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
@@ -161,10 +163,10 @@ function Grp({ heading, children }: { heading: string; children: React.ReactNode
 export function PlayerConsentBody() {
   return (
     <>
-      <p className="text-bone/90">Fast Poker is live on Solana mainnet in beta. By continuing, you acknowledge:</p>
+      <p className="text-bone/90">{BRAND.shortName} is live on Solana mainnet in beta. By continuing, you acknowledge:</p>
 
       <Grp heading="SOFTWARE STATUS">
-        <li>The Fast Poker protocol is early software.</li>
+        <li>The {BRAND.shortName} protocol is early software.</li>
         <li>The contracts have undergone internal review only unless otherwise stated.</li>
         <li>The software is provided AS IS and AS AVAILABLE.</li>
         <li>Bugs, exploits, downtime, table pauses, failed hands, voided sessions, delayed settlement, and temporary loss of card visibility may occur.</li>
@@ -178,7 +180,7 @@ export function PlayerConsentBody() {
 
       <Grp heading="NO REFUNDS, NO COMPENSATION">
         <li>All deposits, withdrawals, rake, buy-ins, jackpot draws, $FP claims, license mints, auctions, and on-chain transactions are FINAL.</li>
-        <li>Paradice Technologies Inc. does not offer refunds, reversals, make-goods, or compensation of any kind under any circumstances, including software bugs, failed hands, disconnections, table pauses, voided sessions, network outages, MagicBlock or TEE failures, exploit losses, mistaken transactions, lost private keys, wallet issues, or user error.</li>
+        <li>The frontend operator does not offer refunds, reversals, make-goods, or compensation of any kind under any circumstances, including software bugs, failed hands, disconnections, table pauses, voided sessions, network outages, MagicBlock or TEE failures, exploit losses, mistaken transactions, lost private keys, wallet issues, or user error.</li>
         <li>No support ticket, dispute, or escalation will result in funds being credited or returned outside the on-chain protocol logic.</li>
       </Grp>
 
@@ -189,16 +191,16 @@ export function PlayerConsentBody() {
       </Grp>
 
       <Grp heading="YOUR REPRESENTATIONS">
-        <li>You are legally allowed to use Fast Poker in your jurisdiction.</li>
+        <li>You are legally allowed to use {BRAND.shortName} in your jurisdiction.</li>
         <li>You meet the required age for online gaming or gambling where you are located.</li>
         <li>You are not located in, resident of, or acting for a prohibited or sanctioned jurisdiction.</li>
         <li>You are using your own funds. You are not playing, depositing, or transacting on behalf of any other person.</li>
-        <li>You are not relying on Paradice Technologies Inc., Fast Poker, or any team member for legal, tax, financial, or gambling advice.</li>
+        <li>You are not relying on the frontend operator, {BRAND.shortName}, or any contributor for legal, tax, financial, or gambling advice.</li>
         <li>You are responsible for taxes, legal compliance, bankroll management, wallet security, and all decisions you make.</li>
       </Grp>
 
       <Grp heading="LIABILITY">
-        <li>To the maximum extent permitted by law, Paradice Technologies Inc., its affiliates, contributors, and operators are not liable for any loss arising from your use of the protocol, including losses from smart contract bugs, network failures, malicious actors, or your own decisions.</li>
+        <li>To the maximum extent permitted by law, the frontend operator, its affiliates, contributors, and operators are not liable for any loss arising from your use of the protocol, including losses from smart contract bugs, network failures, malicious actors, or your own decisions.</li>
         <li>Your sole remedy in any dispute is to stop using the protocol.</li>
       </Grp>
 
@@ -210,8 +212,8 @@ export function DealerConsentBody() {
   return (
     <>
       <p className="text-bone/90">
-        Operating a Fast Poker Dealer Node is a permissionless, independent activity. You are not an
-        employee, agent, partner, contractor, or representative of Paradice Technologies Inc.
+        Operating a {BRAND.shortName} Dealer Node is a permissionless, independent activity. You are not an
+        employee, agent, partner, contractor, or representative of the frontend operator or protocol contributors.
       </p>
 
       <Grp heading="NO PROFIT GUARANTEE">
@@ -222,25 +224,25 @@ export function DealerConsentBody() {
 
       <Grp heading="OPERATING COSTS ARE YOURS">
         <li>You are responsible for SOL transaction fees, priority fees, rent locked in accounts, MagicBlock costs, server costs, RPC costs, bandwidth, and any third-party services.</li>
-        <li>These costs are not reimbursed by Paradice Technologies Inc.</li>
+        <li>These costs are not reimbursed by the frontend operator or protocol contributors.</li>
         <li>Rent may only be recoverable where the protocol and account design allow proper account closure.</li>
       </Grp>
 
       <Grp heading="SOFTWARE AND PROTOCOL RISK">
         <li>Dealer software is provided AS IS and AS AVAILABLE.</li>
         <li>Bugs, network issues, TEE issues, RPC failures, bad configuration, or protocol changes may cause failed settlement, missed rewards, lost opportunities, downtime, or operating losses.</li>
-        <li>Paradice Technologies Inc. has no obligation to compensate operators for any loss.</li>
+        <li>The frontend operator and protocol contributors have no obligation to compensate operators for any loss.</li>
         <li>Protocol parameters, including rake splits, dealer share, emissions, and operating requirements, may change at any time. You operate under current parameters and accept future changes as a condition of continued operation.</li>
       </Grp>
 
       <Grp heading="INDEPENDENT FRONTENDS AND WHITE-LABEL ROOMS">
         <li>If you operate a player-facing interface, branded room, or third-party frontend in addition to your Dealer Node, you are solely responsible for the relationship with your end users, including support, disputes, marketing claims, advertising compliance, and consumer protection law.</li>
-        <li>Paradice Technologies Inc. has no relationship with your end users and no obligation to mediate disputes between you and your users.</li>
+        <li>The frontend operator and protocol contributors have no relationship with your end users and no obligation to mediate disputes between you and your users.</li>
       </Grp>
 
       <Grp heading="COMPLIANCE">
         <li>You are responsible for your own legal, tax, gaming, gambling, AML, KYC, consumer protection, and business obligations.</li>
-        <li>Paradice Technologies Inc. develops software. Dealer operators are independent participants.</li>
+        <li>Dealer operators are independent participants.</li>
       </Grp>
 
     </>

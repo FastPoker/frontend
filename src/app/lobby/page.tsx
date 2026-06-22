@@ -554,11 +554,10 @@ function Home() {
   const [selectedTier, setSelectedTier] = useState<SnGTier>(SnGTier.Micro);
   const [claimingSol, setClaimingSol] = useState(false);
 
-  // SNG queues + pools are still served by the backend (/api/sitngos which is
-  // indexer-backed + 10s server-cached). Polled here so the lobby surfaces
-  // table-fill progress and pool seat counts. Balances + pool state are
-  // delivered via hooks (usePoolHealth / usePokerSupply / useWalletBalances)
-  // and no longer need an interval here at all.
+  // SNG queues + pools are read directly from chain in the public source build.
+  // Polled here so the lobby surfaces table-fill progress and pool seat counts.
+  // Balances + pool state are delivered via hooks (usePoolHealth /
+  // usePokerSupply / useWalletBalances) and no longer need an interval here.
   useEffect(() => {
     // Standalone: tiers are read directly from chain, so they load even before a
     // wallet connects (browse, then connect to join).
@@ -1191,7 +1190,7 @@ function Home() {
                 Sign In
               </button>
               <Link
-                href="/about"
+                href="/how-to-play"
                 className="font-mono text-[10px] tracking-[0.22em] text-boneDim/60 hover:text-orange transition px-3 py-1 rounded-sm hairline"
               >
                 LEARN MORE &rarr;

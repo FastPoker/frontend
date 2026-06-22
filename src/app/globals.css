@@ -93,7 +93,7 @@ body.fp-site-bg {
      z-1. The old `body.fp-site-bg > *` (specificity 0,1,1) beat `.z-50` (0,1,0)
      and dropped the navbar into the same layer as page content — which on iOS
      let the later-in-DOM content hit-test over the nav, so the profile-pill
-     dropdown only opened on the two routes without fp-site-bg (/about, /game/*). */
+     dropdown only opened on routes without fp-site-bg. */
   :where(body.fp-site-bg) > * { position: relative; z-index: 1; }
 }
 

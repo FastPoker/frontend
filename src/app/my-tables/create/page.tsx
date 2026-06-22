@@ -8,7 +8,8 @@
 // production-server dependencies are removed:
 //   - table NAME CLAIM (POST /api/...) — DROPPED. Name was cosmetic and indexer
 //     only; a plain on-chain create is the source of truth here.
-//   - ER index warm-up via /api/tables/list — DROPPED (no such backend).
+//   - ER index warm-up via /api/tables/list — DROPPED from create flow. Node
+//     FULL discovers the table through the table-list route after creation.
 //   - TEE-visibility check switched from /api/tee/token to useGameAuth's
 //     authenticated teeConnection (authority token, enough to read account
 //     presence). Falls through gracefully if TEE auth isn't ready.

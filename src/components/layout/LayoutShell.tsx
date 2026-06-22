@@ -28,11 +28,6 @@ import { RpcSettings } from '@/components/system/RpcSettings';
 const BARE_ROUTES_EXACT = new Set<string>(['/', '/privacy', '/terms', '/region-blocked']);
 const BARE_ROUTES_PREFIX: string[] = [];
 
-/**
- * The About page ('/about') has a custom hero background; every other
- * surface wears the shared photo background via body.fp-site-bg (set here
- * in a useEffect). The actual home ('/') uses the standard site bg.
- */
 function useFpSiteBg(active: boolean) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -54,7 +49,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     inIframe ||
     BARE_ROUTES_EXACT.has(pathname) ||
     BARE_ROUTES_PREFIX.some((r) => pathname.startsWith(r));
-  const isHome = pathname === '/about';
   // Game table: keep Navbar + FooterStrip, hide mobile bottom tabs and drop
   // the bottom pb-14 padding so the table uses full viewport height.
   // The game route is /game?table=<pda> (query-param, for static export), so the
@@ -65,7 +59,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   // FP-card site background would otherwise bleed around the table on
   // narrow viewports and dominate the loading state when on-chain data
   // hasn't streamed in yet.
-  useFpSiteBg(!isBare && !isHome && !isGame);
+  useFpSiteBg(!isBare && !isGame);
 
   return (
     <>

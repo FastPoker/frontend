@@ -19,6 +19,8 @@ import { useWalletBalances } from '@/hooks/useWalletBalances';
 import { SessionModal } from './SessionModal';
 import { TransferFundsModal } from '@/components/modals/TransferFundsModal';
 import { SFX } from '@/lib/sfx';
+import { PROFILE_API_ENABLED } from '@/lib/feature-flags';
+import { BRAND } from '@/lib/branding';
 
 function shortWallet(addr: string, n = 4): string {
   return `${addr.slice(0, n)}…${addr.slice(-n)}`;
@@ -112,7 +114,7 @@ export function ProfilePill() {
     exportWallet({ address: exportWalletAddress }).catch(() => {});
   };
 
-  // Active cosmetic frame — read from localStorage written by /profile.
+  // Active cosmetic frame — read from localStorage written by optional profile tooling.
   // Listen for storage events so the pill updates live when changed in the picker.
   useEffect(() => {
     if (!publicKey) { setActiveFrame('default'); return; }
@@ -146,8 +148,9 @@ export function ProfilePill() {
       return;
     }
     let cancelled = false;
-    // Standalone: no /api/profile backend — show the wallet, skip avatar lookup.
-    if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) return;
+    // Public source release ships no /api/profile backend; show the wallet
+    // unless an operator explicitly adds and enables a compatible profile API.
+    if (!PROFILE_API_ENABLED) return;
     fetch(`/api/profile?wallet=${publicKey.toBase58()}`)
       .then(r => r.json())
       .then(data => {
@@ -474,7 +477,6 @@ export function ProfilePill() {
 
             {/* Menu items (Admin intentionally NOT listed here — access via /admin) */}
             <div className="py-1">
-              <MenuRow href="/profile" icon={<MenuIcon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />} label="My profile" subtitle="holdings · licenses · history" onNavigate={() => setOpen(false)} />
               <MenuRow href="/lobby?tab=my" icon={<MenuIcon d="M4 6h16M4 10h16M4 14h16M4 18h16" />} label="My tables" subtitle="tables you created · rake earned" onNavigate={() => setOpen(false)} />
               <MenuButton icon={<MenuIcon d="M7 16l-4-4m0 0l4-4m-4 4h18M17 8l4 4m0 0l-4 4" />} label="Transfer funds" subtitle="send SOL · USDC · $FP to any wallet" onClick={() => { setOpen(false); setTransferOpen(true); }} />
               <MenuButton icon={<MenuIcon d="M15 7a4 4 0 014 4m-4-8a8 8 0 018 8M9 11a4 4 0 00-4 4M4 19a8 8 0 018-8" />} label="Session keys" subtitle="auto-approve table actions" onClick={() => { setOpen(false); setSessionOpen(true); }} />
@@ -516,19 +518,19 @@ export function ProfilePill() {
             )}>
               <span className="font-mono text-[9px] text-boneDim/55 tracking-[0.22em] flex-1">COMMUNITY</span>
               <a
-                href="https://x.com/fastdotpoker"
+                href={BRAND.social.x}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Fast Poker on X"
+                aria-label={`${BRAND.shortName} on X`}
                 className="w-7 h-7 flex items-center justify-center rounded-sm hairline bg-ink/40 text-bone/70 hover:text-bone hover:bg-orange/[0.08] transition"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
               </a>
               <a
-                href="https://discord.gg/fastpoker"
+                href={BRAND.social.discord}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Fast Poker Discord"
+                aria-label={`${BRAND.shortName} Discord`}
                 className="w-7 h-7 flex items-center justify-center rounded-sm hairline bg-ink/40 text-bone/70 hover:text-bone hover:bg-orange/[0.08] transition"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" /></svg>

@@ -4,9 +4,9 @@
 // Build modes (set via NEXT_OUTPUT):
 //   (unset)      normal `next build` + `next start` node server.
 //   export       LIGHT static export → out/ — servable on any CDN/static host,
-//                no Node server. Use `npm run build:static` (it also moves the
-//                FULL-only /api/indexer proxy aside, since route handlers are not
-//                allowed under static export). The /game route is query-param
+//                no Node server. Use `npm run build:static` (it also moves all
+//                API route handlers aside, since route handlers are not allowed
+//                under static export). The /game route is query-param
 //                (/game?table=<pda>) precisely so it can be pre-rendered.
 //
 // Headers are kept for the node/dev build; under static export they move to the

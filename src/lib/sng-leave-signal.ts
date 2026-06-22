@@ -41,8 +41,8 @@ export function isPoolLeaveVoluntary(gameType: number, tier: number): boolean {
 
 /** Call from the lobby's join handler right after the on-chain tx confirms.
  *  Used to suppress the pending-match sticky when the user just joined and
- *  the local optimistic update flips isInPool=true→false→true while the
- *  server-cached /api/sitngos response catches up. */
+ *  the local optimistic update flips isInPool=true->false->true while direct
+ *  chain polling catches up. */
 export function markPoolJoinVoluntary(gameType: number, tier: number): void {
   joinedAt.set(keyOf(gameType, tier), Date.now());
 }

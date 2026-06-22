@@ -3,6 +3,7 @@ import { Keypair } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import { buildSeatPresenceMessage } from '@/lib/seat-presence-msg';
 import { getDeviceId } from '@/lib/device-id';
+import { INTEGRITY_API_ENABLED } from '@/lib/feature-flags';
 
 // SNG anti-collusion transparency: while seated, heartbeat a device-presence
 // record signed by the seat's SESSION key (gasless, no popup), and poll which
@@ -20,7 +21,7 @@ export function useLinkedSeats(
   // Heartbeat presence while seated.
   useEffect(() => {
     // Standalone: integrity/linked-seat detection is a backend+DB feature; disabled.
-    if (!process.env.NEXT_PUBLIC_ENABLE_INTEGRITY) return;
+    if (!INTEGRITY_API_ENABLED) return;
     if (!tablePda || !seated || !sessionKey) return;
     let cancelled = false;
     const ping = async () => {
@@ -45,7 +46,7 @@ export function useLinkedSeats(
 
   // Poll the linked-signer groups for this table.
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_ENABLE_INTEGRITY) return;
+    if (!INTEGRITY_API_ENABLED) return;
     if (!tablePda) return;
     let cancelled = false;
     const poll = async () => {

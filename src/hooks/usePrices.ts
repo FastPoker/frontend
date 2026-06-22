@@ -6,13 +6,13 @@ import { POKER_MINT } from '@/lib/constants';
 const POKER_MINT_STR = POKER_MINT.toBase58();
 const SOL_MINT_STR = 'So11111111111111111111111111111111111111112';
 
-// $FP live USD price comes from /api/price (Jupiter-backed). It stays 0 with
+// $FP live USD price comes from DexScreener's public token API. It stays 0 with
 // fpIsLive=false until the token has a market, so the UI shows no price rather
 // than a hardcoded placeholder.
 
 export interface PriceView {
   solPrice: number;
-  /** 24h % change for SOL. Positive = up. From CoinGecko via /api/price. */
+  /** 24h % change for SOL. Positive = up. From DexScreener. */
   solChange24h: number;
   fpPrice: number;
   fpChange24h: number;
@@ -36,9 +36,8 @@ let cached: { view: PriceView; ts: number } | null = null;
 const TTL = 20_000;
 
 /**
- * Shared price feed hook. SOL price + 24h change are pulled from /api/price
- * (CoinGecko-backed, server-side cached 60s). $FP is hardcoded until the
- * token has a live market; fpChange24h stays 0 until then.
+ * Shared price feed hook. SOL + $FP price and 24h change are pulled from
+ * DexScreener's public token API, with a small in-module cache.
  */
 export function usePrices(): PriceView {
   const [view, setView] = useState<PriceView>(cached?.view ?? DEFAULT);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PROFILE_API_ENABLED } from '@/lib/feature-flags';
 
 export interface ChatProfile {
   username: string;
@@ -26,9 +27,9 @@ async function batchLoad(missing: string[]): Promise<void> {
   const toFetch = missing.filter((w) => !inflight.has(w));
   if (toFetch.length === 0) return;
 
-  // Standalone: no /api/profile backend (players are shown by wallet only).
-  // Cache nulls so we don't refetch, and skip the request entirely.
-  if (!process.env.NEXT_PUBLIC_INDEXER_WS_URL) {
+  // Public source release ships no /api/profile backend. Operators that add
+  // their own compatible route can opt in with NEXT_PUBLIC_ENABLE_PROFILES=1.
+  if (!PROFILE_API_ENABLED) {
     for (const w of toFetch) cache.set(w, null);
     return;
   }

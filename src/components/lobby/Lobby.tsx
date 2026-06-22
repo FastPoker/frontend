@@ -3503,8 +3503,8 @@ export function Lobby(props: LobbyProps) {
   }>>([]);
   // Lobby-wide header counts from the real table registry (/api/tables/list),
   // which includes live/delegated tables. gameType 3 = cash, 0/1/2 = SNG.
-  // (/api/sitngos can't be used here — it only holds forming queue templates and
-  // drops tables once they go live on the ER.)
+  // SNG queue/pool state cannot be used here: it only represents forming queues
+  // and drops tables once they go live on the ER.
   const [tableSummary, setTableSummary] = useState({
     players: 0, cash: 0, sng: 0, cashActive: 0, sngActive: 0,
   });
@@ -3900,7 +3900,7 @@ export function Lobby(props: LobbyProps) {
   const activeTier: number = sngFilter.tiers.length > 0 ? sngFilter.tiers[0] : selectedTier;
 
   // Header + tab stats come from tableSummary (the real /api/tables/list
-  // registry, incl. live/delegated tables) — not /api/sitngos.
+  // registry, incl. live/delegated tables), not SNG queue templates.
   // Headline "Players" = seated at tables + waiting in SNG pool queues.
   // Seated-only undercounted the real activity: queued players ARE here and
   // committed (they paid a buy-in), they just have no seat yet. The pooled
@@ -4074,7 +4074,7 @@ export function Lobby(props: LobbyProps) {
           onManage={(t) => router.push(t.isDelegated ? `/game?table=${t.pubkey}` : `/my-tables/create?resume=${t.pubkey}`)}
           onBoost={(t) => setBoostTable(t)}
           onClose={(t) => setCloseTarget(t)}
-          onManageWL={(t) => router.push(`/my-tables/${t.pubkey}/whitelist`)}
+          onManageWL={(t) => router.push(`/my-tables/whitelist?id=${encodeURIComponent(t.pubkey)}`)}
         />
         </>
       )}

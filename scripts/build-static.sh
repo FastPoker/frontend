@@ -2,8 +2,8 @@
 # LIGHT static export → ./out  (servable on any CDN / static host / GitHub
 # Pages, no server). This is the easiest way for anyone to run the minimal version.
 #
-# Static export disallows dynamic route handlers, so the FULL-only /api/indexer
-# proxy (unused in LIGHT) is moved aside for the build and restored afterward.
+# Static export disallows route handlers, so all node/FULL-only API routes are
+# moved aside for the build and restored afterward.
 set -euo pipefail
 
 STASH=".api-stash-$$"

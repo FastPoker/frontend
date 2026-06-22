@@ -22,24 +22,6 @@ const RIGHT_NAV: NavItem[] = [
 
 function isActive(pathname: string, href: string): boolean {
   if (href === '/lobby') return pathname === '/lobby';
-  if (href === '/about') return pathname === '/about';
-  // AUCTIONS is its own top-level route. The legacy /earn/auctions URL
-  // redirects to /auctions (next.config.js) so it should not light up EARN.
-  if (href === '/auctions') {
-    return (
-      pathname === '/auctions' ||
-      pathname.startsWith('/auctions/') ||
-      pathname === '/earn/auctions' ||
-      pathname.startsWith('/earn/auctions/')
-    );
-  }
-  if (href === '/earn') {
-    return (
-      (pathname === '/earn' || pathname.startsWith('/earn/')) &&
-      pathname !== '/earn/auctions' &&
-      !pathname.startsWith('/earn/auctions/')
-    );
-  }
   return pathname === href || pathname.startsWith(href + '/');
 }
 

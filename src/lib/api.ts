@@ -106,12 +106,10 @@ export async function rpcGetMultipleAccounts(pubkeys: string[]): Promise<(Accoun
   return data.result ?? [];
 }
 
-// Sit N Go Queues API
+// Back-compat wrapper: the public source build reads SNG queue state directly
+// from chain instead of relying on a node `/api/sitngos` route.
 export async function getQueues(): Promise<{ queues: SitNGoQueue[]; pools: SngPool[] }> {
-  const res = await fetch('/api/sitngos');
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return { queues: data.queues ?? [], pools: data.pools ?? [] };
+  return getQueuesOnChain();
 }
 
 // Standalone: read SNG tiers DIRECTLY from chain (no backend). One getMultipleAccounts
@@ -307,12 +305,10 @@ export async function getMySngTablesOnChain(myWallet: string): Promise<MySngTabl
 }
 
 export async function getTableState(tablePda: string): Promise<any> {
-  const res = await fetch('/api/tables', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'getTable', tablePda }),
+  const res = await fetch(`/api/table-account?pubkey=${encodeURIComponent(tablePda)}`, {
+    cache: 'no-store',
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data;
+  return data.table;
 }

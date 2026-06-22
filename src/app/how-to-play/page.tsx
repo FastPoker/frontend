@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { BRAND } from '@/lib/branding';
 
 // ══════════════════════════════════════════════════════════════════════
 // HOW TO PLAY · the rulebook + the economics, in one page
@@ -384,7 +385,7 @@ function FeesSection() {
                 note={
                   <>
                     {'→ '}
-                    <Link href="/dealer/license" className="text-orange hover:text-orangeHi underline decoration-orange/30">become one</Link>
+                    <a href={BRAND.social.docs} target="_blank" rel="noreferrer" className="text-orange hover:text-orangeHi underline decoration-orange/30">read the operator docs</a>
                   </>
                 }
               />
@@ -448,12 +449,14 @@ function FeesSection() {
               Burn $FP to claim a permanent share of every vault.
             </div>
           </div>
-          <Link
-            href="/earn"
+          <a
+            href={BRAND.social.docs}
+            target="_blank"
+            rel="noreferrer"
             className="px-4 py-2.5 rounded-sm hairline bg-orange/10 border-orange/40 hover:bg-orange/20 hover:border-orange/60 font-mono text-[10px] tracking-[0.22em] text-orange transition whitespace-nowrap"
           >
-            GO TO EARN {'→'}
-          </Link>
+            READ DOCS {'→'}
+          </a>
         </div>
       </div>
     </div>
@@ -511,12 +514,14 @@ function FairSection() {
             Every hand leaves a cryptographic audit trail. Pull up the hand number and inspect the slot hash, shuffle commitment, and action trace.
           </div>
         </div>
-        <Link
-          href="/verify"
+        <a
+          href={BRAND.social.docs}
+          target="_blank"
+          rel="noreferrer"
           className="px-4 py-2.5 rounded-sm hairline bg-emerald-400/10 border-emerald-400/40 hover:bg-emerald-400/20 hover:border-emerald-400/60 font-mono text-[10px] tracking-[0.22em] text-emerald-300 transition whitespace-nowrap"
         >
-          VERIFY A HAND {'→'}
-        </Link>
+          READ VERIFIER DOCS {'→'}
+        </a>
       </div>
     </div>
   );
@@ -621,16 +626,16 @@ export default function HowToPlayPage() {
             ))}
             <div className="pt-6 mt-6 border-t border-orange/10">
               <div className="font-mono text-[9px] text-boneDim/50 tracking-[0.22em] mb-2">RELATED</div>
-              <Link href="/earn" className="block px-3 py-2 rounded-sm hairline bg-ink/30 hover:bg-orange/10 transition">
-                <div className="font-mono text-[10px] text-orange tracking-wider">EARN {'→'}</div>
-                <div className="font-mono text-[9px] text-boneDim/55 mt-0.5">Stake & claim yield</div>
-              </Link>
+              <a href={BRAND.social.docs} target="_blank" rel="noreferrer" className="block px-3 py-2 rounded-sm hairline bg-ink/30 hover:bg-orange/10 transition">
+                <div className="font-mono text-[10px] text-orange tracking-wider">DOCS {'→'}</div>
+                <div className="font-mono text-[9px] text-boneDim/55 mt-0.5">Public setup and economics</div>
+              </a>
               <Link href="/lobby" className="block px-3 py-2 rounded-sm hairline bg-ink/30 hover:bg-orange/10 transition mt-2">
                 <div className="font-mono text-[10px] text-orange tracking-wider">LOBBY {'→'}</div>
                 <div className="font-mono text-[9px] text-boneDim/55 mt-0.5">Find a game</div>
               </Link>
               <a
-                href="https://docs.fast.poker"
+                href={BRAND.social.docs}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block px-3 py-2 rounded-sm hairline bg-ink/30 hover:bg-orange/10 transition mt-2"
@@ -681,10 +686,12 @@ export default function HowToPlayPage() {
             <FeesSection/>
             <div className="mt-3">
               <Link
-                href="/about"
+                href={BRAND.social.docs}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm hairline bg-orange/[0.04] hover:bg-orange/[0.08] transition font-mono text-[10px] tracking-[0.18em] text-orange"
               >
-                FULL ECONOMICS ON THE ABOUT PAGE &rarr;
+                READ THE PUBLIC DOCS &rarr;
               </Link>
             </div>
           </section>
