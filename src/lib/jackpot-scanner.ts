@@ -2,11 +2,10 @@
  * Shared JPV1 scanner used by /api/jackpots/* routes.
  *
  * Strategy:
- *   1. Indexer-first: hit the unified indexer's /jackpots/* routes (defaults
- *      to ${INDEXER_BASE_URL}/jackpots, formerly the standalone
- *      jackpot-indexer service on its own port). The route paths under that
- *      base are unchanged so the standalone service still works if you point
- *      JACKPOT_INDEXER_URL=http://127.0.0.1:3199 at it directly.
+ *   1. Indexer-first: when NEXT_PUBLIC_ENABLE_INDEXER=true, hit the unified
+ *      indexer's /jackpots/* routes via JACKPOT_INDEXER_URL or INDEXER_BASE_URL.
+ *      The paths under that base are unchanged so the standalone service still
+ *      works if you point JACKPOT_INDEXER_URL=http://127.0.0.1:3199 at it directly.
  *   2. RPC scan: list recent FastPoker program signatures, batch-fetch
  *      parsed txs, decode the SPL Memo CPI bytes via
  *      `extractJpv1FromMemo`, dedupe and surface newest-first.
@@ -14,22 +13,22 @@
  * Caches keyed by tunable buckets to keep RPC pressure manageable when
  * the indexer is unavailable.
  */
-import { Connection, PublicKey, ConfirmedSignatureInfo } from '@solana/web3.js';
 import { ANCHOR_PROGRAM_ID } from '@/lib/constants';
 import { getL1Rpc } from '@/lib/rpc-config';
 import { extractJpv1FromMemo, JackpotReceipt } from '@/lib/jpv1';
 import { iterateTransactionsForAddress } from '@/lib/helius-tx';
+import { getIndexerBaseUrl, indexerReadsEnabled } from '@/lib/indexer-env';
 
-// Resolution order:
+// Resolution order, only when NEXT_PUBLIC_ENABLE_INDEXER=true:
 //   1. JACKPOT_INDEXER_URL — explicit override (legacy: pointed at standalone
 //      service on port 3199; can still be used post-migration if you keep it
 //      running side-by-side).
-//   2. INDEXER_BASE_URL + '/jackpots' — the unified indexer (port 3001 by
-//      default), which absorbed the JPV1 decoder + routes.
-//   3. localhost:3001/jackpots — last-resort default for local dev.
+//   2. INDEXER_BASE_URL + '/jackpots' — the unified indexer, which absorbed the
+//      JPV1 decoder + routes.
 const JACKPOT_INDEXER_URL =
-  process.env.JACKPOT_INDEXER_URL
-  || `${(process.env.INDEXER_BASE_URL || 'http://localhost:3001').replace(/\/$/, '')}/jackpots`;
+  indexerReadsEnabled()
+    ? (process.env.JACKPOT_INDEXER_URL || (getIndexerBaseUrl() ? `${getIndexerBaseUrl()}/jackpots` : ''))
+    : '';
 const INDEXER_TIMEOUT_MS = 3_000;
 
 const RECENT_CACHE_TTL_MS = 5_000;
@@ -38,8 +37,6 @@ const PER_HAND_CACHE_TTL_MS = 60_000;
 
 /** Default page size for getSignaturesForAddress sweeps. */
 const SIG_PAGE_SIZE = 1_000;
-/** Default cap for parsed-tx batch fetches. */
-const TX_BATCH_SIZE = 100;
 /** Hard ceiling on receipts cached/returned in a single sweep. */
 const MAX_RECEIPTS = 200;
 
@@ -57,43 +54,6 @@ const recentCache = new Map<number, RecentCacheEntry>();
 const perHandCache = new Map<string, PerHandCacheEntry>();
 let leaderboardCache: { fetchedAt: number; receipts: JackpotReceipt[] } | null = null;
 
-let l1Conn: Connection | null = null;
-function l1(): Connection {
-  if (l1Conn) return l1Conn;
-  l1Conn = new Connection(getL1Rpc(), 'confirmed');
-  return l1Conn;
-}
-
-/**
- * Batch parsed-tx fetch via JSON-RPC. We avoid `connection.getParsedTransactions`
- * because the helper times out individual entries silently — direct batch
- * lets us inspect every result.
- */
-async function batchGetParsedTransactions(sigs: string[]): Promise<any[]> {
-  if (sigs.length === 0) return [];
-  const url = getL1Rpc();
-  const body = sigs.map((sig, idx) => ({
-    jsonrpc: '2.0',
-    id: idx,
-    method: 'getTransaction',
-    params: [sig, { commitment: 'confirmed', encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }],
-  }));
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) return new Array(sigs.length).fill(null);
-  const json = (await res.json()) as any[];
-  const ordered: any[] = new Array(sigs.length).fill(null);
-  for (const entry of Array.isArray(json) ? json : []) {
-    if (typeof entry?.id === 'number' && entry.id >= 0 && entry.id < sigs.length) {
-      ordered[entry.id] = entry.result ?? null;
-    }
-  }
-  return ordered;
-}
-
 /**
  * Scan the FastPoker program's recent signatures and return all JPV1
  * receipts where `mini_hit || grand_hit`. Newest-first, deduped by
@@ -104,11 +64,8 @@ async function batchGetParsedTransactions(sigs: string[]): Promise<any[]> {
  * plenty for /recent dashboards. Leaderboard callers ask for more.
  */
 async function scanProgramForReceipts(targetCount: number, maxPages = 1): Promise<JackpotReceipt[]> {
-  // Was: getSignaturesForAddress (1 credit/page) + batched getTransaction (1
-  // credit each, max 100/batch) — ~1001 credits per 1000 txs.
-  // Now: Helius getTransactionsForAddress in full mode — 10 credits per 100
-  // returned, 1000 per call, status filter server-side. ~10× cheaper for the
-  // RPC fallback path.
+  // Uses the shared transaction-history iterator: enhanced history fast path
+  // when the provider supports it, standard Solana RPC fallback otherwise.
   const receipts: JackpotReceipt[] = [];
   const seen = new Set<string>();
   const cap = Math.max(targetCount, SIG_PAGE_SIZE * Math.max(1, maxPages));

@@ -63,9 +63,10 @@ npm ci
 npm run start
 ```
 
-Wire by URL, not fixed process layout: `INDEXER_BASE_URL` powers server-side
-table lists/history, and optional `NEXT_PUBLIC_INDEXER_WS_URL` powers browser
-live push if set before building.
+Wire by URL, not fixed process layout: `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
+`INDEXER_BASE_URL` turns on indexed table/profile/history/jackpot/stat reads, and
+optional `NEXT_PUBLIC_INDEXER_WS_URL` powers
+browser live push if set before building.
 
 ## Configuration Rules
 
@@ -81,10 +82,13 @@ live push if set before building.
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email, Google, X, and Apple buttons
   each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
 - The indexer is read-only and required for FULL indexed read parity. It needs
-  MongoDB, a paid/dedicated RPC, and Helius LaserStream or equivalent Geyser
-  streaming for production-quality live data.
-- FULL cash table listing uses `/api/tables/list`; with `INDEXER_BASE_URL` it reads
-  the indexer's raw table cache first, then falls back to direct server RPC scans.
+  MongoDB, a paid/dedicated RPC, and stream credentials for production-quality
+  live data.
+- Browser indexer reads are explicit. Leave `NEXT_PUBLIC_ENABLE_INDEXER=false`
+  unless the operator is running the source indexer and has set `INDEXER_BASE_URL`.
+- FULL cash table listing uses `/api/tables/list`; with `NEXT_PUBLIC_ENABLE_INDEXER=true`
+  plus `INDEXER_BASE_URL` it reads the indexer's raw table cache first, then falls
+  back to direct server RPC scans.
 - `NEXT_PUBLIC_*` values are baked into the browser bundle at build time; rebuild
   after changing them.
 
@@ -113,7 +117,7 @@ keypair JSON, wallet files, logs, or generated NFT art.
 
 - Mainnet fund-path smoke test is required before claiming cash flows are certified:
   create cash table, sit, play one hand, cash out, plus SNG join/play.
-- FULL indexer must be tested with the operator's real MongoDB, RPC, and
-  LaserStream credentials.
+- FULL indexer must be tested with the operator's real MongoDB, RPC, and stream
+  credentials.
 - Rebrand before public release. MIT covers the code, not the original FastPoker
   name, logos, token marks, or legal copy.

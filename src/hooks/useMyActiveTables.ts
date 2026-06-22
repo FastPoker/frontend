@@ -5,7 +5,7 @@
  * both `ActiveTableBar` (layout-level, lives on every page) AND
  * `Lobby.tsx` (lobby page only) on independent 20s intervals — at 1000 CCU
  * that's ~360k req/hr per surface = 720k/hr to the same endpoint, plus the
- * underlying RPC cost the route pays (~17k Helius credits per uncached
+ * underlying RPC cost the route pays (one expensive gPA-style scan per uncached
  * call). Now both consumers subscribe to a single poll loop and the
  * upstream call happens once per refresh window regardless of mount count.
  */

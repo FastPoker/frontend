@@ -24,7 +24,7 @@ Run profiles, same source tree:
 |---|---|---|---|
 | **MVR / LIGHT** | Static client-side app on the free public RPC pool | none | easiest source run and static release |
 | **Node server** | `next start` plus route handlers | operator keypair + server RPC | hosted relay/API/RPC surface |
-| **FULL source mode** | Node server plus separate `Indexer` package | relays + indexer + MongoDB | history, leaderboards, stats, live push |
+| **FULL source mode** | Node server plus separate `Indexer` package | relays + indexer + MongoDB | profiles, history, leaderboards, stats, live push |
 
 Everything a player does as a player - create a table, join, sit, bet, claim, leave -
 is an on-chain instruction signed by their own wallet. Node/FULL relays only sign
@@ -114,14 +114,19 @@ npm ci && npm run start   # from the Indexer package directory
 ```
 
 FULL read parity requires the indexer. The Next node server alone can host relay
-routes and an operator RPC proxy, but history, leaderboards, indexed stats, and
-live indexed push require the indexer.
+routes and an operator RPC proxy, but profiles with indexed stats/achievements,
+history, leaderboards, indexed stats, and live indexed push require the indexer.
+Those profiles are standalone and read-only: on-chain XP plus the operator's own
+indexer MongoDB, not the original fast.poker/clientv2 database.
 
-The indexer needs MongoDB, a paid/dedicated mainnet RPC, and Helius LaserStream or
-equivalent Geyser streaming for live production-quality updates. It listens on
-`INDEXER_PORT` (default 3001); point the web app's `INDEXER_BASE_URL` (server
-table lists/history) and optional `NEXT_PUBLIC_INDEXER_WS_URL` (browser live push,
-set before building) at wherever it's reachable - the on-disk layout doesn't matter.
+The indexer needs MongoDB, a paid/dedicated mainnet RPC, and a stream provider for
+live production-quality updates. The bundled stream adapter is LaserStream/Geyser
+compatible, but `RPC_URL` is provider-neutral and standard Solana RPC history is
+supported as a slower fallback. It listens on `INDEXER_PORT` (default 3001); set
+the web app's `NEXT_PUBLIC_ENABLE_INDEXER=true` plus `INDEXER_BASE_URL` to turn on
+frontend indexed reads, and optionally set
+`NEXT_PUBLIC_INDEXER_WS_URL` (browser live push, set before building) at wherever
+it's reachable - the on-disk layout doesn't matter.
 
 ---
 
@@ -146,10 +151,12 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 - **Privy:** disabled by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable Privy; email, Google, X, and
   Apple login buttons each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
-- **Indexer wiring:** client root sets `INDEXER_BASE_URL` for server reads and
-  optional `NEXT_PUBLIC_INDEXER_WS_URL` for browser live push; `Indexer` owns
-  `HELIUS_API_KEY`, `RPC_URL`, `LASERSTREAM_ENDPOINT`, `PROGRAM_ID`, `MONGO_URI`,
-  and `MONGO_DB`. These are operator/server settings; users do not provide them.
+- **Indexer wiring:** client root sets `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
+  `INDEXER_BASE_URL` for indexed frontend reads; optional
+  `NEXT_PUBLIC_INDEXER_WS_URL` enables browser live push. `Indexer` owns
+  `RPC_URL`, optional `RPC_WS_URL`, `STREAM_PROVIDER`, `STREAM_ENDPOINT`,
+  `STREAM_API_KEY`, `PROGRAM_ID`, `MONGO_URI`, and `MONGO_DB`. These are
+  operator/server settings; users do not provide them.
 - **Build mode:** `NEXT_OUTPUT=export` only for `npm run build:static`; unset for
   normal source node builds.
 
@@ -167,6 +174,8 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 | SNG tier player counts | yes | yes | yes | yes |
 | Cash table discovery | limited by free RPC | yes | yes | yes, indexer-first |
 | My tables list | limited by free RPC | yes | yes | yes, indexer-first |
+| Public profile / XP / level | wallet XP only | wallet XP only | wallet XP only | indexed stats + XP |
+| Achievements | derived locally, limited | derived locally, limited | derived locally, limited | indexed achievements |
 | History/leaderboards/avg pot/VPIP | no | no | no | yes |
 | Live indexed WebSocket push | no | no | no | yes |
 
@@ -204,8 +213,8 @@ operator fee; static export; MIT license and trademark docs.
    runtime-certified with a funded wallet: create table, sit, play one hand, cash out,
    plus SNG join/play.
 2. **FULL indexer live test.** Run with the operator's real MongoDB, RPC, and
-   LaserStream credentials and verify history, lobby stats, jackpots, and WebSocket
-   updates end-to-end.
+   stream credentials and verify profiles, achievements, history, lobby stats,
+   jackpots, and WebSocket updates end-to-end.
 3. **Source release commit.** Commit and push the standalone source tree, including
    `package-lock.json` and docs. Ship `Indexer` as its own source package.
 
@@ -219,8 +228,8 @@ operator fee; static export; MIT license and trademark docs.
   routes or same-origin `/rpc`.
 - Process-local social storage works in node mode, but show-cards/player-notes are
   in-memory unless an operator adds a persistent store.
-- Indexer operation is not free-pool infrastructure. It needs MongoDB and a keyed
-  RPC/LaserStream setup.
+- Indexer operation is not free-pool infrastructure. It needs MongoDB and a
+  paid/dedicated RPC; live production updates also need stream credentials.
 - Legal copy still needs operator replacement before a public white-label release.
 
 ---

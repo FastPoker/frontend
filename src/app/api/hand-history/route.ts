@@ -7,8 +7,9 @@ import { getL1Rpc } from '@/lib/rpc-config';
 import { findReceiptForHand } from '@/lib/jackpot-scanner';
 import type { JackpotReceipt } from '@/lib/jpv1';
 import { createHash } from 'crypto';
+import { getIndexerBaseUrl } from '@/lib/indexer-env';
 
-const INDEXER_BASE = process.env.INDEXER_BASE_URL || 'http://localhost:3001';
+const INDEXER_BASE = getIndexerBaseUrl();
 const NOOP_PROGRAM_ID = 'noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV';
 const HRV1_MAGIC = 'HRV1';
 const HRV1_HEADER_LEN = 81;
@@ -174,6 +175,7 @@ function cachedTableRecords(cache: HandHistoryCacheFile, table: string): ParsedH
 }
 
 async function fetchIndexerHandRecord(table: string, handNumber: number, sync: boolean): Promise<ParsedHandRecord | null> {
+  if (!INDEXER_BASE) return null;
   try {
     const qs = sync ? '?sync=1' : '';
     const res = await fetch(
@@ -189,6 +191,7 @@ async function fetchIndexerHandRecord(table: string, handNumber: number, sync: b
 }
 
 async function fetchIndexerTableRecords(table: string, limit: number, sync: boolean): Promise<ParsedHandRecord[]> {
+  if (!INDEXER_BASE) return [];
   try {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (sync) qs.set('sync', '1');

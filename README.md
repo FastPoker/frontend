@@ -25,8 +25,8 @@ infrastructure they prefer.
   own RPC.
 - **FULL source mode** - run the Next node server plus the separate `Indexer`
   source package and your own MongoDB. This is the full read experience: history,
-  leaderboards, richer lobby stats, per-wallet jackpot attribution, and live
-  WebSocket push.
+  leaderboards, standalone profiles/achievements, richer lobby stats, per-wallet
+  jackpot attribution, and live WebSocket push.
 For exact commands, see [SETUP.md](./SETUP.md). For architecture, feature parity,
 and release gates, see [OVERVIEW.md](./OVERVIEW.md). Agent setup guidance ships in
 [AGENTS.md](./AGENTS.md), [CLAUDE.md](./CLAUDE.md), and the portable skill at
@@ -80,6 +80,10 @@ See `.env.example` for the common LIGHT and node-server settings:
 - Privy is off by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable it; email, Google, X, and
   Apple login buttons each have their own `NEXT_PUBLIC_PRIVY_LOGIN_*` opt-in flag.
+- `NEXT_PUBLIC_ENABLE_PROFILES` and `NEXT_PUBLIC_ENABLE_ACHIEVEMENTS` - read-only
+  public profile surfaces, enabled by default; set `0`/`false` to hide them.
+- `NEXT_PUBLIC_ENABLE_INDEXER` - browser-side indexed reads. Leave `false` unless
+  `INDEXER_BASE_URL` points at your own running indexer.
 - `NEXT_PUBLIC_INDEXER_WS_URL` - optional browser WebSocket URL for the source
   indexer.
 - `L1_RPC` or `L1_RPC_PROXY_UPSTREAM` - server-side RPC for node relay routes.
@@ -87,8 +91,12 @@ See `.env.example` for the common LIGHT and node-server settings:
   required only for node relay routes.
 
 For the FULL read experience, run the separate `Indexer` package (wherever you
-keep it). The client needs `INDEXER_BASE_URL` for server-side table lists/history
-and `NEXT_PUBLIC_INDEXER_WS_URL` only for browser WebSocket push.
+keep it). The client needs `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
+`INDEXER_BASE_URL` for indexed table/profile/history/jackpot/stat reads, and
+`NEXT_PUBLIC_INDEXER_WS_URL` only for browser WebSocket push.
+Profiles in this source release are read-only and standalone: they are derived
+from on-chain XP plus the operator's own indexer MongoDB, not the original
+fast.poker/clientv2 database.
 
 ## Static LIGHT build
 
@@ -117,20 +125,24 @@ same provider account only if your quota can support both workloads. End users d
 not need to provide RPCs when you host the Node server with `L1_RPC` and
 `NEXT_PUBLIC_L1_RPC_URL=/rpc`; they will use your same-origin proxy for HTTP RPC
 calls. The indexer still needs MongoDB, a paid/dedicated mainnet RPC, and
-LaserStream/Geyser credentials for production-quality live indexed history. The
-indexer remains read-only; it never holds keys or signs transactions.
+stream credentials for production-quality live indexed history. The indexer
+remains read-only; it never holds keys or signs transactions.
 
 The one wiring rule:
 
 - `INDEXER_BASE_URL` is server-side and should point from the web process to the
   indexer, for example `http://localhost:3001`.
+- `NEXT_PUBLIC_ENABLE_INDEXER=true` is baked into the browser bundle and tells
+  client surfaces and server routes to use the indexer for table, profile,
+  history, jackpot, and stat enrichment.
 - `NEXT_PUBLIC_INDEXER_WS_URL` is baked into the browser bundle at build time and
   must be reachable by the end user's browser for live push, for example
   `wss://your.domain/ws`.
 
 Cash table listing in FULL mode uses the web app's `/api/tables/list` route. That
-route reads the indexer's raw table cache first when `INDEXER_BASE_URL` is set,
-then falls back to direct RPC scans when a server RPC is configured.
+route reads the indexer's raw table cache first when `NEXT_PUBLIC_ENABLE_INDEXER=true`
+and `INDEXER_BASE_URL` is set, then falls back to direct RPC scans when the
+indexer is disabled, cold, unreachable, or no server RPC is configured.
 
 ## Release hygiene
 

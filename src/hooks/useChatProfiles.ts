@@ -27,8 +27,8 @@ async function batchLoad(missing: string[]): Promise<void> {
   const toFetch = missing.filter((w) => !inflight.has(w));
   if (toFetch.length === 0) return;
 
-  // Public source release ships no /api/profile backend. Operators that add
-  // their own compatible route can opt in with NEXT_PUBLIC_ENABLE_PROFILES=1.
+  // Public source profiles are read-only and indexer/on-chain derived. Operators
+  // can set NEXT_PUBLIC_ENABLE_PROFILES=0 to suppress these enrichment reads.
   if (!PROFILE_API_ENABLED) {
     for (const w of toFetch) cache.set(w, null);
     return;

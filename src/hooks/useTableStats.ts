@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { INDEXER_API_ENABLED } from '@/lib/feature-flags';
 
 /**
  * Per-table lobby stats (Avg Pot / VPIP / Hands per Hour) for the cash
@@ -40,14 +41,14 @@ interface CacheEntry {
 const CACHE_TTL_MS = 60_000;
 const REFRESH_MS = 30_000;
 const moduleCache = new Map<string, CacheEntry>();
-let inflight: Map<string, Promise<Record<string, TableStats | null>>> = new Map();
+const inflight: Map<string, Promise<Record<string, TableStats | null>>> = new Map();
 
 function cacheKeyFor(pdas: string[]): string {
   return [...pdas].sort().join(',');
 }
 
 async function fetchTableStats(pdas: string[]): Promise<Record<string, TableStats | null>> {
-  if (pdas.length === 0) return {};
+  if (!INDEXER_API_ENABLED || pdas.length === 0) return {};
   const key = cacheKeyFor(pdas);
   const cached = moduleCache.get(key);
   if (cached && Date.now() - cached.fetchedAtMs < CACHE_TTL_MS) {
@@ -89,7 +90,7 @@ export function useTableStats(pdas: readonly string[]): {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (pdas.length === 0) {
+    if (!INDEXER_API_ENABLED || pdas.length === 0) {
       setStats({});
       setLoading(false);
       return;

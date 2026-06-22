@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createBreaker, fetchWithTimeout, type BreakerState } from '@/lib/circuit-breaker';
+import { getIndexerBaseUrl, indexerReadsEnabled } from '@/lib/indexer-env';
 
 /**
  * FULL-mode only. Read proxy from `/api/indexer/*` to the operator's
@@ -22,7 +23,8 @@ import { createBreaker, fetchWithTimeout, type BreakerState } from '@/lib/circui
  * so callers apply their fallback (direct RPC) instead of each request burning a
  * timeout. A half-open probe lets a recovered indexer reseal the breaker.
  */
-const INDEXER_BASE = process.env.INDEXER_BASE_URL || 'http://localhost:3001';
+const INDEXER_BASE = getIndexerBaseUrl();
+const INDEXER_ENABLED = indexerReadsEnabled();
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +80,13 @@ async function fetchUpstream(target: string, method: string, body?: string): Pro
 }
 
 async function proxy(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
+  if (!INDEXER_ENABLED || !INDEXER_BASE) {
+    return NextResponse.json(
+      { error: 'indexer disabled', detail: 'Set INDEXER_BASE_URL and NEXT_PUBLIC_ENABLE_INDEXER=true to enable indexed reads.' },
+      { status: 503 },
+    );
+  }
+
   const clean = sanitizeSegments(params.path);
   if (!clean) {
     return NextResponse.json({ error: 'invalid path' }, { status: 400 });

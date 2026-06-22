@@ -14,6 +14,7 @@
  * Wire protocol mirrors Indexer/src/ws-gateway.ts.
  */
 import { useEffect, useState } from 'react';
+import { INDEXER_API_ENABLED } from '@/lib/feature-flags';
 
 type AnyData = unknown;
 
@@ -40,6 +41,7 @@ const state: ConnectionState = {
 };
 
 function wsUrl(): string | null {
+  if (!INDEXER_API_ENABLED) return null;
   if (typeof window === 'undefined') return null;
   const explicit = process.env.NEXT_PUBLIC_INDEXER_WS_URL;
   // No default — feature is opt-in via env var. When unset, callers fall back

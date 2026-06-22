@@ -88,19 +88,24 @@ Prerequisites:
 
 - A MongoDB instance you run or rent.
 - A paid/dedicated mainnet RPC. Do not use public/free Solana RPC.
-- Helius LaserStream or equivalent Geyser credentials for live indexed updates.
+- A stream provider for production live indexed updates. The bundled adapter is
+  LaserStream/Geyser-compatible, but the base `RPC_URL` is provider-neutral.
 
 Root web env:
 
 ```bash
+NEXT_PUBLIC_ENABLE_INDEXER=true
 INDEXER_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_INDEXER_WS_URL=ws://localhost:3001/ws
 ```
 
-`INDEXER_BASE_URL` powers server-side table lists/history and is not exposed to the
-browser. `NEXT_PUBLIC_INDEXER_WS_URL` is only for browser live push and must be set
-before building if you want it in the client bundle. The indexer RPC is server-side;
-end users never provide it.
+`NEXT_PUBLIC_ENABLE_INDEXER=true` is the frontend switch for indexed reads.
+`INDEXER_BASE_URL` is the server-side target URL and is not exposed to the
+browser. Both are required for table/profile/history/jackpot/stat enrichment to
+use the indexer; otherwise the app falls back to direct RPC paths where possible.
+`NEXT_PUBLIC_INDEXER_WS_URL` is only for browser live push and must be set before
+building if you want it in the client bundle. The indexer RPC is server-side; end
+users never provide it.
 
 The indexer is a separate package (this release ships it alongside the frontend;
 run it from wherever you keep it — the directory layout doesn't matter). In the
@@ -115,9 +120,11 @@ Edit at least:
 ```bash
 MONGO_URI=mongodb://localhost:27017
 MONGO_DB=fastpoker_indexer
-RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
-LASERSTREAM_ENDPOINT=https://laserstream-mainnet-ewr.helius-rpc.com
-HELIUS_API_KEY=YOUR_KEY
+RPC_URL=https://your-dedicated-mainnet-rpc.example
+RPC_WS_URL=wss://your-dedicated-mainnet-rpc-websocket.example
+STREAM_PROVIDER=laserstream
+STREAM_ENDPOINT=https://your-laserstream-geyser-endpoint.example
+STREAM_API_KEY=YOUR_STREAM_KEY
 PROGRAM_ID=PokerXYdXL2SKNnfGbv1WE7vJHipTpNsfZbZeVvoJLn
 INDEXER_PORT=3001
 ```
@@ -129,12 +136,14 @@ npm ci
 npm run start
 ```
 
-It listens on `INDEXER_PORT` (default 3001). Point the web app's `INDEXER_BASE_URL`
-(server-side) and optional `NEXT_PUBLIC_INDEXER_WS_URL` (browser) at wherever it's
-reachable - only the URLs matter, not where the indexer lives on disk.
+It listens on `INDEXER_PORT` (default 3001). Set the web app's
+`NEXT_PUBLIC_ENABLE_INDEXER=true`, point `INDEXER_BASE_URL` (server-side) at it,
+and optionally set `NEXT_PUBLIC_INDEXER_WS_URL` (browser) wherever it's reachable
+- only the URLs matter, not where the indexer lives on disk.
 
-Then build or restart the root web app after `NEXT_PUBLIC_INDEXER_WS_URL` is set,
-because `NEXT_PUBLIC_*` values are baked into the browser bundle at build time.
+Then build or restart the root web app after `NEXT_PUBLIC_ENABLE_INDEXER` or
+`NEXT_PUBLIC_INDEXER_WS_URL` changes, because `NEXT_PUBLIC_*` values are baked into
+the browser bundle at build time.
 
 ## 5. Rebrand Before Shipping
 

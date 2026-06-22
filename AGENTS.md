@@ -54,9 +54,10 @@ npm ci
 npm run start
 ```
 
-Wire the indexer by URL, not by folder assumptions. `INDEXER_BASE_URL` powers
-server-side table lists/history; `NEXT_PUBLIC_INDEXER_WS_URL` is optional browser
-live push and must be set before building if used.
+Wire the indexer by URL, not by folder assumptions. `NEXT_PUBLIC_ENABLE_INDEXER=true`
+plus `INDEXER_BASE_URL` turns on indexed table/profile/history/jackpot/stat reads;
+`NEXT_PUBLIC_INDEXER_WS_URL` is
+optional browser live push and must be set before building if used.
 
 ## Rules For Changes
 
@@ -69,7 +70,8 @@ live push and must be set before building if used.
   `NEXT_PUBLIC_PRIVY_APP_ID` and `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email,
   Google, X, and Apple buttons require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flags.
 - Treat FULL as Node server plus the source indexer. Node server without the indexer
-  is hosted relay/RPC mode, not full indexed read parity.
+  is hosted relay/RPC mode, not full indexed read parity. Indexed frontend reads
+  should only be enabled when `NEXT_PUBLIC_ENABLE_INDEXER=true`.
 - Keep secrets out of source. Never commit `.env`, `.env.local`, keypair JSON, wallet
   files, or generated build output.
 - Prefer source setup instructions over infrastructure opinions. Users can run the
@@ -100,5 +102,5 @@ npm run typecheck
 - Mainnet fund-path smoke test is still required before claiming cash flows are
   production-certified: create cash table, sit, play one hand, cash out, plus SNG
   join/play.
-- FULL indexer must be tested with the operator's real MongoDB, RPC, and
-  LaserStream credentials.
+- FULL indexer must be tested with the operator's real MongoDB, RPC, and stream
+  credentials.

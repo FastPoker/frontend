@@ -1,5 +1,6 @@
 import { Commitment, Connection, PublicKey } from '@solana/web3.js';
 import { ANCHOR_PROGRAM_ID } from './constants';
+import { getIndexerBaseUrl } from './indexer-env';
 
 /**
  * Server-side helpers for calling the local indexer service.
@@ -7,14 +8,14 @@ import { ANCHOR_PROGRAM_ID } from './constants';
  * The source indexer runs out-of-process (Indexer, port 3001) and owns
  * discovery of FastPoker tables. API routes that previously did their own
  * getProgramAccounts scans should prefer these helpers — each indexer call
- * replaces ~17k Helius credits with a single HTTP request + one batched
+ * replaces an expensive metered RPC scan with a single HTTP request + one batched
  * getMultipleAccountsInfo. Every helper falls back transparently when the
  * indexer is unreachable or empty, so the route degrades safely.
  */
 
 const PROGRAM_ID = ANCHOR_PROGRAM_ID;
 const DELEGATION_PROGRAM_ID = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
-const INDEXER_BASE_URL = process.env.INDEXER_BASE_URL || '';
+const INDEXER_BASE_URL = getIndexerBaseUrl();
 
 export type TablePubkey = string;
 export interface TableEntry {

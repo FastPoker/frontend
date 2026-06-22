@@ -167,8 +167,8 @@ export function ProfilePill() {
       return;
     }
     let cancelled = false;
-    // Public source release ships no /api/profile backend; show the wallet
-    // unless an operator explicitly adds and enables a compatible profile API.
+    // Public source profiles are read-only and indexer/on-chain derived. Show
+    // the wallet unless profile reads are enabled and return a handle/avatar.
     if (!PROFILE_API_ENABLED) return;
     fetch(`/api/profile?wallet=${publicKey.toBase58()}`)
       .then(r => r.json())
@@ -496,6 +496,7 @@ export function ProfilePill() {
 
             {/* Menu items (Admin intentionally NOT listed here — access via /admin) */}
             <div className="py-1">
+              <MenuRow href={`/profile?address=${walletStr}`} icon={<MenuIcon d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0" />} label="Profile" subtitle="stats · XP · achievements" onNavigate={() => setOpen(false)} />
               <MenuRow href="/lobby?tab=my" icon={<MenuIcon d="M4 6h16M4 10h16M4 14h16M4 18h16" />} label="My tables" subtitle="tables you created · rake earned" onNavigate={() => setOpen(false)} />
               <MenuButton icon={<MenuIcon d="M7 16l-4-4m0 0l4-4m-4 4h18M17 8l4 4m0 0l-4 4" />} label="Transfer funds" subtitle="send SOL · USDC · $FP to any wallet" onClick={() => { setOpen(false); setTransferOpen(true); }} />
               <MenuButton icon={<MenuIcon d="M15 7a4 4 0 014 4m-4-8a8 8 0 018 8M9 11a4 4 0 00-4 4M4 19a8 8 0 018-8" />} label="Session keys" subtitle="auto-approve table actions" onClick={() => { setOpen(false); setSessionOpen(true); }} />

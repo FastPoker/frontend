@@ -54,6 +54,7 @@ const discFilter = {
 let responseCache: { data: any; ts: number } | null = null;
 let backgroundRefreshInProgress = false;
 let backgroundIntervalStarted = false;
+let backgroundRefreshPromise: Promise<void> | null = null;
 const REFRESH_INTERVAL_MS = 60_000;
 
 type TableSnapshot = {
@@ -238,8 +239,16 @@ async function overlayDelegatedTableState(tables: any[]): Promise<void> {
 async function refreshCacheInBackground() {
   try {
     const l1 = getL1Connection();
-    const { delegatedAccounts, undelegatedAccounts } = await getIndexedOrScannedAccounts(l1);
-    const tables = parseRows(delegatedAccounts, undelegatedAccounts);
+    let { delegatedAccounts, undelegatedAccounts } = await getIndexedOrScannedAccounts(l1);
+    let tables = parseRows(delegatedAccounts, undelegatedAccounts);
+
+    if (tables.length === 0 && l1 && (delegatedAccounts.length > 0 || undelegatedAccounts.length > 0)) {
+      const scanned = await scanProgramTables(l1);
+      delegatedAccounts = scanned.delegatedAccounts;
+      undelegatedAccounts = scanned.undelegatedAccounts;
+      tables = parseRows(delegatedAccounts, undelegatedAccounts);
+    }
+
     await overlayDelegatedTableState(tables);
 
     const brokenSet = new Set(getBrokenTablesList().map((t) => t.pubkey));
@@ -269,17 +278,23 @@ async function refreshCacheInBackground() {
   }
 }
 
+function runBackgroundRefresh(): Promise<void> {
+  if (backgroundRefreshPromise) return backgroundRefreshPromise;
+  backgroundRefreshInProgress = true;
+  backgroundRefreshPromise = refreshCacheInBackground().finally(() => {
+    backgroundRefreshInProgress = false;
+    backgroundRefreshPromise = null;
+  });
+  return backgroundRefreshPromise;
+}
+
 function ensureBackgroundRefresh() {
   if (backgroundIntervalStarted) return;
   backgroundIntervalStarted = true;
-  if (!backgroundRefreshInProgress) {
-    backgroundRefreshInProgress = true;
-    refreshCacheInBackground().finally(() => { backgroundRefreshInProgress = false; });
-  }
+  if (!backgroundRefreshInProgress) void runBackgroundRefresh();
   setInterval(() => {
     if (backgroundRefreshInProgress) return;
-    backgroundRefreshInProgress = true;
-    refreshCacheInBackground().finally(() => { backgroundRefreshInProgress = false; });
+    void runBackgroundRefresh();
   }, REFRESH_INTERVAL_MS);
 }
 
@@ -378,12 +393,15 @@ export async function GET(request: Request) {
 
     if (creatorFilter) return await fetchCreatorTables(creatorFilter, gameTypeFilter);
 
+    if (!responseCache) await runBackgroundRefresh();
+
     ensureBackgroundRefresh();
     if (!responseCache) {
       return NextResponse.json({ tables: [], delegatedCount: 0, undelegatedCount: 0, brokenCount: 0, loading: true });
     }
 
-    let tables = responseCache.data.tables.filter((t: any) => !t.broken && t.isDelegated);
+    const cashOnly = gameTypeFilter !== null && Number(gameTypeFilter) === 3;
+    let tables = responseCache.data.tables.filter((t: any) => !t.broken && (cashOnly ? true : t.isDelegated));
     if (gameTypeFilter !== null) {
       const gt = Number(gameTypeFilter);
       if (Number.isFinite(gt)) tables = tables.filter((t: any) => t.gameType === gt);

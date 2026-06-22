@@ -71,11 +71,12 @@ npm ci && npm run start   # from the Indexer package directory
 ```
 
 The indexer is read-only and required for FULL indexed read parity. It needs
-MongoDB, a paid/dedicated mainnet RPC, and Helius LaserStream or equivalent Geyser
-streaming for production-quality live data. Wire it by URL only:
-`INDEXER_BASE_URL` powers server-side table lists/history, and optional
-`NEXT_PUBLIC_INDEXER_WS_URL` powers browser live push if set before building.
-Point those URLs at wherever the indexer listens (`INDEXER_PORT`, default 3001).
+MongoDB, a paid/dedicated mainnet RPC, and stream credentials for production-quality
+live data. Wire it by URL only: `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
+`INDEXER_BASE_URL` turns on indexed table/profile/history/jackpot/stat reads, and
+optional `NEXT_PUBLIC_INDEXER_WS_URL` powers browser live push if set before
+building. Point those URLs at wherever the indexer listens (`INDEXER_PORT`,
+default 3001).
 
 ## Validation
 

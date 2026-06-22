@@ -187,7 +187,7 @@ function getPhaseDelay(phase: string, wsActive: boolean = false): number {
   }
 }
 
-// Owner/delegation lookup via the indexer's push-fresh Table cache (0 Helius).
+// Owner/delegation lookup via the indexer's push-fresh Table cache (0 RPC when enabled).
 // Lets the game poll skip the per-poll L1 getAccountInfo when the table is
 // delegated (the common case). Returns null on miss/cold/unreachable/timeout so
 // the caller falls back to a direct read — the stale-shadow guard stays on the

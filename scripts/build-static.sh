@@ -6,12 +6,20 @@
 # moved aside for the build and restored afterward.
 set -euo pipefail
 
-STASH=".api-stash-$$"
-cleanup() { [ -d "$STASH" ] && mv "$STASH" src/app/api || true; }
+API_STASH=".api-stash-$$"
+PROFILE_DYNAMIC_STASH=".profile-dynamic-stash-$$"
+cleanup() {
+  [ -d "$API_STASH" ] && mv "$API_STASH" src/app/api || true
+  [ -d "$PROFILE_DYNAMIC_STASH" ] && mkdir -p src/app/profile && mv "$PROFILE_DYNAMIC_STASH" 'src/app/profile/[address]' || true
+}
 trap cleanup EXIT
 
 if [ -d src/app/api ]; then
-  mv src/app/api "$STASH"
+  mv src/app/api "$API_STASH"
+fi
+
+if [ -d 'src/app/profile/[address]' ]; then
+  mv 'src/app/profile/[address]' "$PROFILE_DYNAMIC_STASH"
 fi
 
 NEXT_OUTPUT=export next build
