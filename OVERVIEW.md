@@ -130,6 +130,12 @@ frontend indexed reads, and optionally set
 `NEXT_PUBLIC_INDEXER_WS_URL` (browser live push, set before building) at wherever
 it's reachable - the on-disk layout doesn't matter.
 
+A free Helius key is useful for frontend smoke testing but is not a production
+FULL-indexer answer by itself. Current Helius docs list low free-tier RPC limits
+and standard LaserStream WebSocket methods, but not mainnet LaserStream gRPC.
+Without `STREAM_ENDPOINT`/`STREAM_API_KEY`, the public indexer falls back to
+seeded/polled cache paths that can lag.
+
 ---
 
 ## 4. Configuration

@@ -99,9 +99,10 @@ export function ChatPanel({ channel, title, heightPx = 320, showAvatars = false 
           const profile = showAvatars ? profiles[m.wallet] ?? null : null;
           const displayName = profile?.username || shortWallet(m.wallet);
           const isReal = m.wallet && m.wallet !== '11111111111111111111111111111111';
+          const profileHref = `/profile?address=${encodeURIComponent(m.wallet)}`;
           const nameNode = isReal ? (
             <Link
-              href={`/profile/${m.wallet}`}
+              href={profileHref}
               className={`${mine ? 'text-amber-300' : 'text-orange-300'} hover:text-amber-100 underline decoration-orange/20 underline-offset-2 hover:decoration-amber-300/60 transition`}
               title={`Open profile · ${m.wallet}`}
             >
@@ -122,7 +123,7 @@ export function ChatPanel({ channel, title, heightPx = 320, showAvatars = false 
                 className="flex items-start gap-2.5 font-mono text-[11px] leading-tight"
               >
                 <Link
-                  href={`/profile/${m.wallet}`}
+                  href={profileHref}
                   className="shrink-0 mt-[1px]"
                   title={`Open profile · ${m.wallet}`}
                 >

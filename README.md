@@ -72,6 +72,23 @@ public RPC pool, and keyless MagicBlock TEE auth. For a hosted public Node serve
 set server-side `L1_RPC` and build with `NEXT_PUBLIC_L1_RPC_URL=/rpc` so visitors
 use your same-origin RPC proxy instead of bringing their own endpoint.
 
+### RPC provider notes
+
+A free Helius key is reasonable for local MVR/frontend smoke testing, but not a
+production FULL setup by itself. As of the current Helius docs, the free plan is
+limited to 1M credits/month, 10 RPC requests/second, 5 `getProgramAccounts`/second,
+1 `sendTransaction`/second, and standard LaserStream WebSocket methods. It does
+not provide mainnet LaserStream gRPC. That means:
+
+- Browser/local frontend: a free Helius HTTP+WSS pair can work for testing, but
+  users may hit quotas during table discovery, polling, or transaction-heavy play.
+- Hosted Node frontend: prefer server-side `L1_RPC` plus
+  `NEXT_PUBLIC_L1_RPC_URL=/rpc` so end users do not need to paste RPCs.
+- FULL/indexer mode: the frontend can read from your indexer, but the indexer
+  itself still needs enough RPC/stream capacity. A seeded or non-streaming indexer
+  can lag; delegated cash-table occupancy is only treated as live after the web
+  server overlays the current TEE account state.
+
 ## Requirements By Mode
 
 | Mode | Required |

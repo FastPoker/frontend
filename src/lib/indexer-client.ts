@@ -30,6 +30,31 @@ interface RawIndexerTable {
   lamports?: number;
 }
 
+export interface RawTablesIndexerStatus {
+  asOfMs: number;
+  seedAsOfMs: number;
+  streamAsOfMs: number;
+  streamConfigured: boolean;
+  streamConnected: boolean;
+  tableCount: number;
+}
+
+export interface RawTablesIndexerResult {
+  entries: TableEntry[];
+  status: RawTablesIndexerStatus;
+}
+
+const RAW_TABLES_MAX_AGE_MS = 10 * 60_000;
+
+function numberField(body: Record<string, unknown>, key: keyof RawTablesIndexerStatus): number {
+  const value = body[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function boolField(body: Record<string, unknown>, key: keyof RawTablesIndexerStatus): boolean {
+  return body[key] === true;
+}
+
 /**
  * Return the pubkey list for non-closed tables known to the indexer. Use
  * `creator` or `gameType` to filter server-side. Returns null when the
@@ -102,7 +127,8 @@ export async function fetchTablesByPubkey(
  */
 export async function fetchRawTablesViaIndexer(opts: {
   timeoutMs?: number;
-} = {}): Promise<TableEntry[] | null> {
+  maxAgeMs?: number;
+} = {}): Promise<RawTablesIndexerResult | null> {
   if (!INDEXER_BASE_URL) return null;
   try {
     const res = await fetch(new URL('/v1/tables', INDEXER_BASE_URL).toString(), {
@@ -110,7 +136,18 @@ export async function fetchRawTablesViaIndexer(opts: {
       signal: AbortSignal.timeout(opts.timeoutMs ?? 2500),
     });
     if (!res.ok) return null;
-    const body = await res.json() as { tables?: RawIndexerTable[] };
+    const body = await res.json() as { tables?: RawIndexerTable[] } & Record<string, unknown>;
+    const status: RawTablesIndexerStatus = {
+      asOfMs: numberField(body, 'asOfMs'),
+      seedAsOfMs: numberField(body, 'seedAsOfMs'),
+      streamAsOfMs: numberField(body, 'streamAsOfMs'),
+      streamConfigured: boolField(body, 'streamConfigured'),
+      streamConnected: boolField(body, 'streamConnected'),
+      tableCount: numberField(body, 'tableCount'),
+    };
+    const maxAgeMs = opts.maxAgeMs ?? RAW_TABLES_MAX_AGE_MS;
+    if (status.asOfMs <= 0 || Date.now() - status.asOfMs > maxAgeMs) return null;
+
     const rows = Array.isArray(body.tables) ? body.tables : [];
     const out: TableEntry[] = [];
     for (const row of rows) {
@@ -128,7 +165,7 @@ export async function fetchRawTablesViaIndexer(opts: {
         // Skip malformed cache rows; the route can still fall back.
       }
     }
-    return out.length ? out : null;
+    return out.length ? { entries: out, status } : null;
   } catch {
     return null;
   }

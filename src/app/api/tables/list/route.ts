@@ -8,6 +8,7 @@ import {
   fetchRawTablesViaIndexer,
   fetchTablesByPubkey,
   type TableEntry,
+  type RawTablesIndexerStatus,
 } from '@/lib/indexer-client';
 import { attachTokenDecimals } from '@/lib/mint-decimals';
 import { getTableBlacklist } from '@/lib/table-blacklist';
@@ -68,6 +69,15 @@ const SNAPSHOT_TTL_MS = 60_000;
 const SNAPSHOT_MAX = 100;
 const tableSnapshots = new Map<string, TableSnapshot>();
 
+type TeeOverlayResult = {
+  attempted: number;
+  updated: number;
+  stale: number;
+  error?: string;
+};
+
+const emptyTeeOverlay: TeeOverlayResult = { attempted: 0, updated: 0, stale: 0 };
+
 function getL1Connection(): Connection | null {
   try {
     return new Connection(getL1Rpc(), 'confirmed');
@@ -78,16 +88,20 @@ function getL1Connection(): Connection | null {
 
 function parseTable(pubkey: PublicKey, data: Buffer, isDelegated: boolean) {
   if (data.length < 256 || Buffer.compare(data.subarray(0, 8), TABLE_DISC) !== 0) return null;
+  const snapshotCurrentPlayers = data[OFF.CURRENT_PLAYERS];
+  const snapshotPot = Number(data.readBigUInt64LE(OFF.POT));
   return {
     pubkey: pubkey.toBase58(),
     phase: data[OFF.PHASE],
-    currentPlayers: data[OFF.CURRENT_PLAYERS],
+    currentPlayers: isDelegated ? 0 : snapshotCurrentPlayers,
+    snapshotCurrentPlayers,
     maxPlayers: data[OFF.MAX_PLAYERS],
     smallBlind: Number(data.readBigUInt64LE(OFF.SMALL_BLIND)),
     bigBlind: Number(data.readBigUInt64LE(OFF.BIG_BLIND)),
     gameType: data[OFF.GAME_TYPE],
     tier: data.length > OFF.TIER ? data[OFF.TIER] : 0,
-    pot: Number(data.readBigUInt64LE(OFF.POT)),
+    pot: isDelegated ? 0 : snapshotPot,
+    snapshotPot,
     handNumber: Number(data.readBigUInt64LE(OFF.HAND_NUMBER)),
     lastActionSlot: data.length >= OFF.LAST_ACTION_SLOT + 8
       ? Number(data.readBigUInt64LE(OFF.LAST_ACTION_SLOT)) : 0,
@@ -109,6 +123,8 @@ function parseTable(pubkey: PublicKey, data: Buffer, isDelegated: boolean) {
       ? Number(data.readBigUInt64LE(OFF.RAKE_CAP)) : 0,
     isPrivate: data.length > OFF.IS_PRIVATE ? data[OFF.IS_PRIVATE] === 1 : false,
     location: isDelegated ? 'TEE' : 'L1',
+    liveStateSource: isDelegated ? 'tee-pending' : 'l1',
+    liveStateStale: isDelegated,
     decimals: 9,
   };
 }
@@ -178,9 +194,12 @@ function mergeFetchedAccounts(...groups: TableEntry[][]): TableEntry[] {
 async function getIndexedOrScannedAccounts(l1: Connection | null): Promise<{
   delegatedAccounts: TableEntry[];
   undelegatedAccounts: TableEntry[];
+  indexerStatus?: RawTablesIndexerStatus;
 }> {
   const raw = await fetchRawTablesViaIndexer({});
-  if (raw?.length) return splitEntries(raw);
+  if (raw?.entries.length) {
+    return { ...splitEntries(raw.entries), indexerStatus: raw.status };
+  }
 
   const indexerPubkeys = await discoverViaIndexer({});
   if (indexerPubkeys && l1) {
@@ -190,6 +209,14 @@ async function getIndexedOrScannedAccounts(l1: Connection | null): Promise<{
 
   if (l1) return scanProgramTables(l1);
   return { delegatedAccounts: [], undelegatedAccounts: [] };
+}
+
+function markDelegatedStateStale(table: any, source = 'tee-unavailable') {
+  if (!table?.isDelegated) return;
+  table.currentPlayers = 0;
+  table.pot = 0;
+  table.liveStateSource = source;
+  table.liveStateStale = true;
 }
 
 function parseRows(delegatedAccounts: TableEntry[], undelegatedAccounts: TableEntry[]): any[] {
@@ -209,37 +236,52 @@ function parseRows(delegatedAccounts: TableEntry[], undelegatedAccounts: TableEn
   return tables;
 }
 
-async function overlayDelegatedTableState(tables: any[]): Promise<void> {
+async function overlayDelegatedTableState(tables: any[]): Promise<TeeOverlayResult> {
   const delegatedTables = tables.filter((t) => t.isDelegated);
-  if (delegatedTables.length === 0) return;
+  if (delegatedTables.length === 0) return emptyTeeOverlay;
+  const result: TeeOverlayResult = { attempted: delegatedTables.length, updated: 0, stale: 0 };
   try {
     const tee = await getTeeConnection();
     for (let i = 0; i < delegatedTables.length; i += 100) {
       const chunk = delegatedTables.slice(i, i + 100);
       const infos = await tee.getMultipleAccountsInfo(chunk.map((t: any) => new PublicKey(t.pubkey))).catch(() => null);
-      if (!infos) continue;
+      if (!infos) {
+        for (const t of chunk) markDelegatedStateStale(t);
+        result.stale += chunk.length;
+        continue;
+      }
       for (let j = 0; j < chunk.length; j++) {
         const info = infos[j];
-        if (!info || info.data.length < 256) continue;
-        const d = Buffer.from(info.data);
         const t = chunk[j];
+        if (!info || info.data.length < 256) {
+          markDelegatedStateStale(t);
+          result.stale += 1;
+          continue;
+        }
+        const d = Buffer.from(info.data);
         t.currentPlayers = d[OFF.CURRENT_PLAYERS];
         t.phase = d[OFF.PHASE];
         t.pot = Number(d.readBigUInt64LE(OFF.POT));
         t.handNumber = Number(d.readBigUInt64LE(OFF.HAND_NUMBER));
         t.lastActionSlot = Number(d.readBigUInt64LE(OFF.LAST_ACTION_SLOT));
+        t.liveStateSource = 'tee';
+        t.liveStateStale = false;
+        result.updated += 1;
       }
     }
-  } catch {
-    // TEE auth is optional for listing; stale L1/indexer values are better than
-    // hiding the table list entirely.
+  } catch (e: any) {
+    for (const t of delegatedTables) markDelegatedStateStale(t);
+    result.updated = 0;
+    result.stale = delegatedTables.length;
+    result.error = e?.message ? String(e.message).slice(0, 160) : 'TEE overlay unavailable';
   }
+  return result;
 }
 
 async function refreshCacheInBackground() {
   try {
     const l1 = getL1Connection();
-    let { delegatedAccounts, undelegatedAccounts } = await getIndexedOrScannedAccounts(l1);
+    let { delegatedAccounts, undelegatedAccounts, indexerStatus } = await getIndexedOrScannedAccounts(l1);
     let tables = parseRows(delegatedAccounts, undelegatedAccounts);
 
     if (tables.length === 0 && l1 && (delegatedAccounts.length > 0 || undelegatedAccounts.length > 0)) {
@@ -249,7 +291,7 @@ async function refreshCacheInBackground() {
       tables = parseRows(delegatedAccounts, undelegatedAccounts);
     }
 
-    await overlayDelegatedTableState(tables);
+    const teeOverlay = await overlayDelegatedTableState(tables);
 
     const tableBlacklist = getTableBlacklist();
     const hiddenCount = tables.filter((t: any) => tableBlacklist.has(t.pubkey)).length;
@@ -267,6 +309,8 @@ async function refreshCacheInBackground() {
           delegatedCount: delegatedAccounts.length,
           undelegatedCount: undelegatedAccounts.length,
           hiddenCount,
+          indexerStatus,
+          teeOverlay,
         },
         ts: Date.now(),
       };
@@ -406,8 +450,8 @@ export async function GET(request: Request) {
     }
     const paged = pageTables(tables, url);
     if (paged instanceof NextResponse) return paged;
-    const playersOnline = (responseCache.data.tables as Array<{ isDelegated?: boolean; currentPlayers?: number }>)
-      .filter((t) => t.isDelegated)
+    const playersOnline = (responseCache.data.tables as Array<{ isDelegated?: boolean; liveStateStale?: boolean; currentPlayers?: number }>)
+      .filter((t) => t.isDelegated && !t.liveStateStale)
       .reduce((sum, t) => sum + (t.currentPlayers || 0), 0);
     return NextResponse.json({
       ...responseCache.data,
@@ -435,8 +479,8 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
   const raw = await fetchRawTablesViaIndexer({});
   let indexerDelegated: TableEntry[] = [];
   let indexerUndelegated: TableEntry[] = [];
-  if (raw?.length) {
-    const split = splitEntries(raw);
+  if (raw?.entries.length) {
+    const split = splitEntries(raw.entries);
     indexerDelegated = split.delegatedAccounts;
     indexerUndelegated = split.undelegatedAccounts;
   } else if (l1) {
@@ -453,7 +497,7 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
   const undelegatedAccounts = mergeFetchedAccounts(indexerUndelegated, scanned.undelegatedAccounts);
   const tables = parseRows(delegatedAccounts, undelegatedAccounts)
     .filter((t: any) => t.creator === creatorFilter);
-  await overlayDelegatedTableState(tables);
+  const teeOverlay = await overlayDelegatedTableState(tables);
   if (l1) {
     try { await attachTokenDecimals(l1, tables); } catch {}
   }
@@ -463,5 +507,10 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
     const gt = Number(gameTypeFilter);
     if (Number.isFinite(gt)) filtered = filtered.filter((t: any) => t.gameType === gt);
   }
-  return NextResponse.json({ tables: filtered, delegatedCount: delegatedAccounts.length, undelegatedCount: undelegatedAccounts.length });
+  return NextResponse.json({
+    tables: filtered,
+    delegatedCount: delegatedAccounts.length,
+    undelegatedCount: undelegatedAccounts.length,
+    teeOverlay,
+  });
 }
