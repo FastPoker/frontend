@@ -7,7 +7,9 @@ secrets shipped. You bring your own RPC.
 
 This repository ships as **source code**. Operators can run the source with Node,
 export static files, use their own process manager, add MongoDB only for
-FULL/indexer mode, or point at infrastructure they already operate.
+FULL/indexer mode, or point at infrastructure they already operate. It is also a
+fully functional frontend template/reference implementation that can be run as-is,
+forked, rebranded, or used as a base for a custom frontend.
 
 ---
 
@@ -144,7 +146,10 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 - **Branding:** `NEXT_PUBLIC_BRAND_*`, assets under `public/brand/`, and
   `src/lib/branding.ts`.
 - **Operator fee:** `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
-  `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, cash equivalents, and `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL`.
+  `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, cash equivalents, and
+  `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL`. This is optional and disabled when the
+  wallet is blank. It is a frontend-added SOL transfer in builds an operator
+  ships, separate from protocol buy-ins, prize pools, rake, and custody.
 - **On-chain overrides:** `NEXT_PUBLIC_FASTPOKER_PROGRAM_ID`, `NEXT_PUBLIC_POKER_MINT`,
   `NEXT_PUBLIC_POOL_PDA`, `NEXT_PUBLIC_TREASURY`, `NEXT_PUBLIC_CRANK_PUBKEY`, and
   permission/registry/steel program ids.

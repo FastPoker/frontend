@@ -9,6 +9,9 @@ Copy this into your agent:
 
 ```text
 You are helping me run the FastPoker public frontend source release.
+This is a fully functional frontend template/reference implementation. Help me
+run it as source, fork/rebrand it if needed, or use it as the base for my own
+frontend. The protocol remains on chain; this repo is not a custody backend.
 
 Start with the easiest MVR path unless I explicitly ask for FULL:
 1. Verify Node is available and install dependencies with npm ci.
@@ -29,6 +32,17 @@ stream provider. Wire the frontend with:
 - NEXT_PUBLIC_ENABLE_INDEXER=true
 - INDEXER_BASE_URL=http://localhost:3001
 - NEXT_PUBLIC_INDEXER_WS_URL=ws://localhost:3001/ws if browser live push is needed
+
+If I want a frontend operator fee, explain and configure only these optional
+frontend envs:
+- NEXT_PUBLIC_OPERATOR_FEE_WALLET
+- NEXT_PUBLIC_SNG_FEE_BPS
+- NEXT_PUBLIC_SNG_FEE_FLAT_SOL
+- NEXT_PUBLIC_CASH_FEE_BPS
+- NEXT_PUBLIC_CASH_FEE_FLAT_SOL
+- NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL
+Leave the wallet blank to disable. Make clear this is separate from protocol
+buy-ins, prize pools, rake, and custody.
 
 Do not add Docker or IPFS setup. Do not commit .env files, keypairs, node_modules,
 .next, out, logs, or generated runtime data.

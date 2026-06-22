@@ -164,19 +164,42 @@ Then build or restart the root web app after `NEXT_PUBLIC_ENABLE_INDEXER` or
 `NEXT_PUBLIC_INDEXER_WS_URL` changes, because `NEXT_PUBLIC_*` values are baked into
 the browser bundle at build time.
 
-## 6. Rebrand Before Shipping
+## 6. Optional Frontend Fee
+
+This source template can optionally add a frontend operator fee on top of entry
+transactions. This is not the protocol buy-in, prize pool, or rake. It is a
+frontend-level SOL transfer included only in builds you ship, shown in the JOIN
+price and confirmation UI, and disabled by default.
+
+Leave `NEXT_PUBLIC_OPERATOR_FEE_WALLET` blank for no frontend fee. To enable it:
+
+```bash
+NEXT_PUBLIC_OPERATOR_FEE_WALLET=<your-solana-wallet>
+NEXT_PUBLIC_SNG_FEE_BPS=100
+NEXT_PUBLIC_SNG_FEE_FLAT_SOL=
+NEXT_PUBLIC_CASH_FEE_BPS=
+NEXT_PUBLIC_CASH_FEE_FLAT_SOL=
+NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL=
+```
+
+`NEXT_PUBLIC_SNG_FEE_BPS=100` means 1% on SNG entries. Flat values are in SOL.
+The code caps percentage fees at 10% even if a higher bps value is configured.
+Cash fee envs use the same model, but are dormant until the cash entry fee flow
+is enabled in this source release.
+
+## 7. Rebrand Before Shipping
 
 Set `NEXT_PUBLIC_BRAND_*` values in `.env.local`, update `public/brand/`, and replace
 the legal copy with your own Terms/Privacy/Consent text. The MIT license covers the
 code; the original FastPoker name, logos, and token marks are not yours to ship.
 
-## 7. Agent-Assisted Setup
+## 8. Agent-Assisted Setup
 
 If you want Codex, Claude, or another coding agent to install and verify the
 source release, point it at [AGENT_SETUP.md](./AGENT_SETUP.md). That file is a
 copy-paste runbook for MVR, static, Node server, and FULL indexer setup.
 
-## 8. Validation
+## 9. Validation
 
 Run these before publishing source:
 
@@ -194,7 +217,7 @@ npm ci
 npm run typecheck
 ```
 
-## 9. What Not To Ship
+## 10. What Not To Ship
 
 Do not include:
 

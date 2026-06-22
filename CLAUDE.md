@@ -12,6 +12,9 @@ instructions. Users can run the source however they want. The supported paths ar
 - Next node server from source
 - Optional read-side indexer from source
 
+This is a fully functional frontend template/reference implementation. Users may
+run it as-is, fork/rebrand it, or use it as the base for their own frontend.
+
 Use `SETUP.md` for exact setup commands and `OVERVIEW.md` for architecture,
 feature parity, status, and release gates. Use `AGENT_SETUP.md` for a concise
 copy-paste install runbook.
@@ -61,6 +64,13 @@ Privy is disabled by default. A public build should show wallet-only auth unless
 the operator sets both `NEXT_PUBLIC_PRIVY_APP_ID` and
 `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`. Email, Google, X, and Apple buttons are
 separate opt-ins through `NEXT_PUBLIC_PRIVY_LOGIN_*` flags.
+
+Optional operator fees are configured only through frontend env:
+`NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
+`NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, cash equivalents, and
+`NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL`. Leave the wallet blank to disable. These are
+frontend-added SOL transfers, not protocol rake, prize-pool changes, or custody
+logic.
 
 ## FULL Indexer Path
 

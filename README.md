@@ -9,10 +9,12 @@ site. You bring your own RPC; gameplay rides the MagicBlock TEE.
 yours to use; the *brand* is not. Rebrand before you ship. See
 [TRADEMARK.md](./TRADEMARK.md) and `src/lib/branding.ts`.
 
-This repo is intended to ship as source code. Operators run it with Node, a
-static host, a process manager, their own RPC provider, or any infrastructure
-they prefer. MongoDB is only required if you also run the separate indexer for
-FULL read features.
+This repo is intended to ship as source code. It is a fully functional frontend
+template/reference implementation: run it as-is, fork it, rebrand it, or use it
+as a starting point for a custom room. Operators run it with Node, a static host,
+a process manager, their own RPC provider, or any infrastructure they prefer.
+MongoDB is only required if you also run the separate indexer for FULL read
+features.
 
 ## Run profiles
 
@@ -97,6 +99,12 @@ See `.env.example` for the common LIGHT and node-server settings:
   Apple login buttons each have their own `NEXT_PUBLIC_PRIVY_LOGIN_*` opt-in flag.
 - `NEXT_PUBLIC_ENABLE_PROFILES` and `NEXT_PUBLIC_ENABLE_ACHIEVEMENTS` - read-only
   public profile surfaces, enabled by default; set `0`/`false` to hide them.
+- `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
+  `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, `NEXT_PUBLIC_CASH_FEE_BPS`,
+  `NEXT_PUBLIC_CASH_FEE_FLAT_SOL`, and `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL` -
+  optional frontend operator fee settings. Leave the wallet blank to disable.
+  The fee is added only by builds you ship, shown to users in the entry UI, and
+  is separate from protocol buy-ins, prize pools, rake, and on-chain custody.
 - `NEXT_PUBLIC_ENABLE_INDEXER` - indexed frontend reads. Leave `false` unless
   `INDEXER_BASE_URL` points at your own running indexer.
 - `NEXT_PUBLIC_INDEXER_WS_URL` - optional browser WebSocket URL for the source

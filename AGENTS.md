@@ -7,6 +7,8 @@ or publish this standalone client.
 
 - This is a source-code release. Do not add packaged backend assumptions unless the
   user explicitly changes that direction.
+- This is a fully functional frontend template/reference implementation. Users may
+  run it as-is, fork/rebrand it, or use it as a base for a custom frontend.
 - The easiest path is MVR / LIGHT: `npm ci`, `cp .env.example .env.local`,
   `npm run dev`, or `npm run build:static`.
 - Treat `SETUP.md` as the human setup source of truth and `OVERVIEW.md` as the
@@ -51,9 +53,7 @@ private provider key into `NEXT_PUBLIC_L1_RPC_URL`.
 FULL indexer from source:
 
 ```bash
-cd ../Indexer
-npm ci
-npm run start
+npm ci && npm run start   # from the Indexer package directory
 ```
 
 Wire the indexer by URL, not by folder assumptions. `NEXT_PUBLIC_ENABLE_INDEXER=true`
@@ -73,6 +73,11 @@ optional browser live push and must be set before building if used.
 - Keep public-source auth wallet-only by default. Privy requires both
   `NEXT_PUBLIC_PRIVY_APP_ID` and `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email,
   Google, X, and Apple buttons require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flags.
+- Optional operator fees are frontend-only env settings:
+  `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
+  `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, cash equivalents, and
+  `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL`. Leave the wallet blank to disable. Do not
+  describe these as protocol rake, prize-pool changes, or custody logic.
 - Treat FULL as Node server plus the source indexer. Node server without the indexer
   is hosted relay/RPC mode, not full indexed read parity. Indexed frontend reads
   should only be enabled when `NEXT_PUBLIC_ENABLE_INDEXER=true`.
@@ -97,8 +102,7 @@ npm run build:static
 For indexer changes, also run:
 
 ```bash
-cd ../Indexer
-npm run typecheck
+npm run typecheck   # from the Indexer package directory
 ```
 
 ## Known Gates

@@ -11,6 +11,11 @@ Treat this repository as a source-code release. Users can run the source however
 they want. Do not add packaged infrastructure unless the user explicitly reverses
 that direction.
 
+Treat the app as a fully functional frontend template/reference implementation.
+Users may run it as-is, fork/rebrand it, or use it as the base for a custom
+frontend. The source frontend is not a custody backend; player actions are still
+wallet-signed protocol transactions.
+
 Use these repo docs as source of truth:
 
 - `SETUP.md` for human setup commands.
@@ -59,9 +64,7 @@ bring their own RPC. Do not put a private provider URL/key directly in
 FULL source indexer:
 
 ```bash
-cd ../Indexer
-npm ci
-npm run start
+npm ci && npm run start   # from the Indexer package directory
 ```
 
 Wire by URL, not fixed process layout: `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
@@ -84,6 +87,12 @@ browser live push if set before building.
 - Privy is disabled by default. It requires `NEXT_PUBLIC_PRIVY_APP_ID` plus
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true`; email, Google, X, and Apple buttons
   each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
+- Optional operator fees are frontend-only env settings:
+  `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
+  `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, cash equivalents, and
+  `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL`. Leave the wallet blank to disable. Explain
+  them as frontend-added SOL transfers shown to users, not protocol rake,
+  prize-pool changes, or custody logic.
 - The indexer is read-only and required for FULL indexed read parity. It needs
   MongoDB, a paid/dedicated RPC, and stream credentials for production-quality
   live data.
@@ -109,8 +118,7 @@ npm run build:static
 For indexer changes, run:
 
 ```bash
-cd ../Indexer
-npm run typecheck
+npm run typecheck   # from the Indexer package directory
 ```
 
 Do not commit or ship `node_modules/`, `.next/`, `out/`, `.env`, `.env.local`,
