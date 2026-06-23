@@ -28,11 +28,11 @@ Run profiles, same source tree:
 | **Node server** | `next start` plus route handlers | operator keypair + server RPC | hosted relay/API/RPC surface |
 | **FULL source mode** | Node server plus separate `Indexer` package | relays + indexer + MongoDB | profiles, history, leaderboards, stats, live push |
 
-Everything a player does as a player - create a table, join, sit, bet, claim, leave -
-is an on-chain instruction signed by their own wallet. Node/FULL relays only sign
-protocol helper transactions: ready/delegation, top-up apply, cleanup, rake
-distribution, and TEE helper auth. The relay keypair is not a custody wallet and
-never signs player actions.
+Everything a player does as a player - create a table, join, sit, bet, claim,
+stake, bid, mint a dealer license, or leave - is an on-chain instruction signed
+by their own wallet. Node/FULL relays only sign protocol helper transactions:
+ready/delegation, top-up apply, cleanup, rake distribution, and TEE helper auth.
+The relay keypair is not a custody wallet and never signs player actions.
 
 ---
 
@@ -63,7 +63,9 @@ Browser
 
 ### What Changes By Profile
 
-- **Player actions:** wallet-signed in every profile.
+- **Player actions:** wallet-signed in every profile. This includes cash table
+  creation, initial cash sit/deposit, SNG joins, `/earn` staking/claims,
+  `/auctions` bids, and `/dealer/license` mints.
 - **Relay-assisted protocol work:** available in node/FULL source mode; static LIGHT
   needs an external crank/dealer/relay network for the same helper work.
 - **Discovery:** global table listing needs either the node table-list route with
@@ -148,7 +150,8 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
   For hosted Node mode, set `NEXT_PUBLIC_L1_RPC_URL=/rpc`, server-side `L1_RPC`,
   and a browser-reachable `NEXT_PUBLIC_L1_WS_URL`.
 - **Node relays:** `L1_RPC` or `L1_RPC_PROXY_UPSTREAM`, `AUTHORITY_KEYPAIR_PATH`,
-  `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN`.
+  `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN`. This activates helper
+  routes only; it does not replace player wallet signing.
 - **Branding:** `NEXT_PUBLIC_BRAND_*`, assets under `public/brand/`, and
   `src/lib/branding.ts`.
 - **Operator fee:** `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
@@ -182,6 +185,9 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 | Cash sit/deposit/play | external relay dependent | yes with capable infra | yes | yes |
 | Claims/leave | yes | yes | yes | yes |
 | Cash top-up/cleanup/clear-rake | no static relay | no static relay | yes | yes |
+| Earn staking/claims | yes | yes | yes | yes |
+| Token auction bids | limited by free RPC | yes | yes | yes |
+| Dealer license mint | yes | yes | yes | yes |
 | SNG tier player counts | yes | yes | yes | yes |
 | Cash table discovery | limited by free RPC | yes | yes | yes, indexer-first |
 | My tables list | limited by free RPC | yes | yes | yes, indexer-first |
@@ -212,9 +218,10 @@ cannot perform server-side relay work or read-side aggregation.
 **Build state:** TypeScript, lint, node build, and static export have been wired and
 verified during the port. The source release path is the target.
 
-**Done:** SNG join/play; cash create + sit + play client flow; node relay route ports
+**Done:** SNG join/play; cash create + sit + play client flow; `/earn` staking and
+claims; `/auctions` bid flow; `/dealer/license` mint flow; node relay route ports
 for ready/top-up/cleanup/clear-rake/SNG ready; same-origin `/rpc`; metadata/history/
-jackpot routes; process-local show-cards/player-notes; my-tables; claims; branding;
+jackpot routes; process-local show-cards/player-notes; my-tables; branding;
 operator fee; static export; MIT license and trademark docs.
 
 **Gates before public go-live:**
@@ -235,6 +242,8 @@ operator fee; static export; MIT license and trademark docs.
 
 - Free public RPC often blocks direct browser `getProgramAccounts`, so static
   LIGHT global cash table discovery and my-tables can be limited on the free pool.
+  The auction leaderboard has the same limitation because rank discovery is a
+  registry `getProgramAccounts` scan.
 - Static export excludes all route handlers. Static deployments cannot use `/api/*`
   routes or same-origin `/rpc`.
 - Process-local social storage works in node mode, but show-cards/player-notes are
@@ -272,6 +281,9 @@ src/lib/table-discovery.ts    gPA-based table discovery
 src/app/lobby/page.tsx        SNG join flow
 src/app/game/page.tsx         cash/SNG table
 src/app/my-tables/            cash create/list flows
+src/app/earn/page.tsx         staking and reward claims
+src/app/auctions/page.tsx     token listing auction bids
+src/app/dealer/license/       dealer license mint
 src/app/api/cash-game/*       node cash relay routes
 src/app/api/sitngos/ready     node SNG ready/delegation relay
 src/app/api/tee/token         node operator TEE token helper

@@ -44,6 +44,9 @@ and release gates, see [OVERVIEW.md](./OVERVIEW.md). Agent setup guidance ships 
   wallet.
 - Create cash tables, sit, play, claim, and leave through player-signed on-chain
   transactions.
+- Use `/earn` to burn/stake `$FP` and claim wallet rewards.
+- Use `/auctions` to bid SOL for token listings.
+- Use `/dealer/license` to mint dealer licenses from the registry program.
 - Mint a per-session TEE auth JWT by signing a wallet challenge. No helper server
   or API key is required for the LIGHT card auth path.
 
@@ -129,6 +132,23 @@ See `.env.example` for the common LIGHT and node-server settings:
 - `L1_RPC` or `L1_RPC_PROXY_UPSTREAM` - server-side RPC for node relay routes.
 - `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN` -
   required only for node relay routes.
+
+### Helper authority model
+
+There is no helper account for player-funded actions. Cash table creation,
+initial cash sit/deposit, SNG joins, staking, reward claims, auction bids, and
+dealer-license mints are built in the browser and signed by the user's wallet.
+
+`AUTHORITY_KEYPAIR_PATH` only matters when you run the Node server and enable
+route handlers. That authority signs protocol-side helper transactions such as
+cash ready nudges, top-up apply, stale deposit cleanup, clear-rake, SNG ready, and
+operator TEE token helpers. It never signs as the player and it never chooses
+player fund amounts or destinations from a request body.
+
+Static LIGHT has no route handlers, so those relay helpers are unavailable unless
+an external crank/dealer/relay network performs the same protocol work. Node
+server mode activates them by setting `L1_RPC`, `AUTHORITY_KEYPAIR_PATH`,
+`TEE_RPC`, and `APP_ORIGIN`.
 
 For the FULL read experience, run the separate `Indexer` package (wherever you
 keep it). The client needs `NEXT_PUBLIC_ENABLE_INDEXER=true` plus

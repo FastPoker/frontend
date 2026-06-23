@@ -14,9 +14,12 @@ type NavItem = { href: string; label: string };
 // Standalone: only the routes that exist in this build.
 const LEFT_NAV: NavItem[] = [
   { href: '/lobby', label: 'LOBBY' },
+  { href: '/earn', label: 'EARN' },
+  { href: '/auctions', label: 'AUCTIONS' },
 ];
 
 const RIGHT_NAV: NavItem[] = [
+  { href: '/dealer/license', label: 'DEALER' },
   { href: '/how-to-play', label: 'HOW TO' },
 ];
 
