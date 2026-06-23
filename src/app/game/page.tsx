@@ -3433,7 +3433,7 @@ function CashGameView() {
               maxPlayers={gameState.maxPlayers}
               lastActionSlot={gameState.lastActionSlot}
               playerActions={playerActions}
-              currentBet={gameState.currentBet}
+              currentBet={displayState!.currentBet}
               tokenMint={gameState.tokenMint}
               tokenDecimals={tokenDecimals}
               isCashGame={gameState?.isCashGame ?? true}

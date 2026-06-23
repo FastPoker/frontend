@@ -6199,7 +6199,13 @@ export default function PokerTable({
               phase={phase}
               tablePda={tablePda}
               handNumber={handNumber}
-              currentBet={Math.max(currentBet, ...players.map(p => p.bet || 0))}
+              // Table.min_bet is the canonical amount owed. Do not derive this
+              // from seat bet_this_round values: seat WS updates can lag a
+              // street reset, briefly leaving preflop bets on the felt after
+              // the table has already moved to a checked flop. Inflating
+              // currentBet from those stale seat values renders phantom CALL
+              // buttons until the next poll catches up.
+              currentBet={currentBet}
               myBet={myPlayer?.bet || 0}
               myChips={myPlayer?.chips || 0}
               pot={displayPot}
