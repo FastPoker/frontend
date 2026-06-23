@@ -74,6 +74,11 @@ const LOBBY_CACHE_TTL_MS = 30_000;
 const lobbyCache = new Map<string, { at: number; tables: LobbyDiscoveredTable[] }>();
 const lobbyInflight = new Map<string, Promise<LobbyDiscoveredTable[]>>();
 
+function hasGpaCapableRpc(): boolean {
+  const rpcUrl = getEffectiveRpcUrl();
+  return !!rpcUrl && rpcUrl.toLowerCase() !== 'pool';
+}
+
 const tableDiscFilter = {
   memcmp: {
     offset: 0,
@@ -122,6 +127,7 @@ async function getProgramAccountPubkeysViaV2(program: PublicKey, filters: any[])
 }
 
 async function gpaPubkeys(conn: Connection, program: PublicKey, filters: any[]): Promise<string[]> {
+  if (!hasGpaCapableRpc()) return [];
   try {
     const accts = await conn.getProgramAccounts(program, { filters, dataSlice: { offset: 0, length: 0 } });
     return accts.map((a) => a.pubkey.toBase58());
@@ -131,6 +137,7 @@ async function gpaPubkeys(conn: Connection, program: PublicKey, filters: any[]):
 }
 
 async function gpaSeatTablePubkeys(conn: Connection, program: PublicKey, wallet: string): Promise<string[]> {
+  if (!hasGpaCapableRpc()) return [];
   const filters: any[] = [seatDiscFilter, { memcmp: { offset: SEAT_WALLET_OFFSET, bytes: wallet } }];
   try {
     const seats = await conn.getProgramAccounts(program, {
@@ -188,6 +195,7 @@ async function gpaTablePubkeys(
   program: PublicKey,
   opts: { creator?: string; gameType?: number } = {},
 ): Promise<PublicKey[]> {
+  if (!hasGpaCapableRpc()) return [];
   const filters: any[] = [tableDiscFilter];
   if (opts.gameType !== undefined) filters.push(u8Filter(TABLE_OFFSETS.GAME_TYPE, opts.gameType));
   if (opts.creator) filters.push({ memcmp: { offset: TABLE_CREATOR_OFFSET, bytes: opts.creator } });
@@ -284,6 +292,7 @@ function rankLobbyTables(tables: LobbyDiscoveredTable[]): LobbyDiscoveredTable[]
 }
 
 async function runLobbyScan(opts: { creator?: string; gameType?: number; limit?: number }): Promise<LobbyDiscoveredTable[]> {
+  if (!hasGpaCapableRpc()) return [];
   const conn = makeL1Connection();
   const pubkeys = new Map<string, PublicKey>();
   const [delegatedPubkeys, undelegatedPubkeys] = await Promise.all([
@@ -311,6 +320,7 @@ async function runLobbyScan(opts: { creator?: string; gameType?: number; limit?:
 }
 
 async function run(wallet: string): Promise<DiscoveredTable[]> {
+  if (!hasGpaCapableRpc()) return [];
   const conn = makeL1Connection();
   const pdas = new Set<string>();
   const sources = new Map<string, { seat: boolean; creator: boolean }>();
