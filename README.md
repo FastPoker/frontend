@@ -5,6 +5,14 @@ thin client to the same live on-chain game: no fast.poker backend, no shipped
 database, no bundled keys, and no hosted dependency controlled by the original
 site. You bring your own RPC; gameplay rides the MagicBlock TEE.
 
+> [!WARNING]
+> **Beta software. Use at your own risk.**
+>
+> Fast Poker is still in Beta and the protocol is considered highly
+> experimental. The Dealer Service, frontend, and indexer can break, behave
+> unexpectedly, or lose funds. Run any of it at your own risk. Do not commit
+> funds, keys, or infrastructure you are not prepared to lose.
+
 **Open source (MIT).** Fork it, modify it, run it however you like. The code is
 yours to use; the *brand* is not. Rebrand before you ship. See
 [TRADEMARK.md](./TRADEMARK.md) and `src/lib/branding.ts`.
