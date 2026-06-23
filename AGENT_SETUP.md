@@ -26,9 +26,9 @@ For hosted Node mode, help me set:
 - L1_RPC=<server-side paid/dedicated mainnet RPC>
 
 A free Helius key can be used for local frontend smoke testing, but do not
-present it as a production FULL setup. It has low RPC limits and standard
-LaserStream WebSocket support, not the mainnet LaserStream gRPC stream used by
-the public indexer adapter.
+present it as a production FULL setup. Provider limits and plan names change;
+production FULL/live indexing requires a paid/dedicated RPC and stream
+credentials compatible with the public indexer adapter.
 
 For FULL indexed reads, also help me run the separate Indexer package. MongoDB is
 required for FULL. SQLite is not supported in this release. The indexer also

@@ -56,8 +56,8 @@ Browser
   wallet-signed auth directly from the browser. Node mode can also mint operator
   read tokens from `/api/tee/token`.
 - **Relays:** node route handlers for same-origin `/rpc`, cash/SNG ready, top-up
-  apply, stale cleanup, clear-rake, token metadata, jackpots, hand history, and
-  process-local show-cards/player-notes.
+  apply, stale cleanup, clear-rake, token metadata, jackpots, hand history,
+  process-local player-notes, and disabled show-cards relay scaffolding.
 - **Indexer:** optional, read-only source process. Crawls the chain and serves
   history, leaderboards, aggregate table stats, and live WebSocket push.
 
@@ -73,6 +73,8 @@ Browser
   providers often block the direct browser fallback.
 - **History/stats:** require the source indexer.
 - **Real-time:** client polling works everywhere; indexer adds WebSocket push.
+- **Request level:** the browser defaults to Minimal request mode. Global cash
+  and watch-table discovery require the RPC settings panel's Full request level.
 
 ---
 
@@ -134,10 +136,10 @@ frontend indexed reads, and optionally set
 it's reachable - the on-disk layout doesn't matter.
 
 A free Helius key is useful for frontend smoke testing but is not a production
-FULL-indexer answer by itself. Current Helius docs list low free-tier RPC limits
-and standard LaserStream WebSocket methods, but not mainnet LaserStream gRPC.
-Without `STREAM_ENDPOINT`/`STREAM_API_KEY`, the public indexer falls back to
-seeded/polled cache paths that can lag.
+FULL-indexer answer by itself. Provider limits and plan names change, so verify
+the provider's current stream/RPC plan before launch. Without
+`STREAM_ENDPOINT`/`STREAM_API_KEY`, the public indexer falls back to seeded/polled
+cache paths that can lag.
 
 ---
 
@@ -194,8 +196,8 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 | Token auction bids | limited by free RPC | yes | yes | yes |
 | Dealer license mint | yes | yes | yes | yes |
 | SNG tier player counts | yes | yes | yes | yes |
-| Cash table discovery | limited by free RPC | yes | yes | yes, indexer-first |
-| My tables list | limited by free RPC | yes | yes | yes, indexer-first |
+| Cash table discovery | Full mode + limited by free RPC | Full mode + yes | Full mode + yes | Full mode + yes, indexer-first |
+| My tables list | limited by free RPC/local cache | yes | yes | yes, indexer-first |
 | Public profile / XP / level | wallet XP only | wallet XP only | wallet XP only | indexed stats + XP |
 | Achievements | derived locally, limited | derived locally, limited | derived locally, limited | indexed achievements |
 | History/leaderboards/avg pot/VPIP | no | no | no | yes |
@@ -223,10 +225,12 @@ cannot perform server-side relay work or read-side aggregation.
 **Build state:** TypeScript, lint, node build, and static export have been wired and
 verified during the port. The source release path is the target.
 
-**Done:** SNG join/play; cash create + sit + play client flow; `/earn` staking and
-claims; `/auctions` bid flow; `/dealer/license` mint flow; node relay route ports
-for ready/top-up/cleanup/clear-rake/SNG ready; same-origin `/rpc`; metadata/history/
-jackpot routes; process-local show-cards/player-notes; my-tables; branding;
+**Done:** SNG join/play; cash create + sit + play client flow; private table
+whitelist management; `/earn` staking and claims; `/auctions` bid flow;
+`/dealer/license` mint flow; node relay route ports for
+ready/top-up/cleanup/clear-rake/SNG ready; same-origin `/rpc`; metadata/history/
+jackpot routes; process-local player-notes; disabled show-cards scaffolding;
+my-tables; branding;
 operator fee; static export; MIT license and trademark docs.
 
 **Gates before public go-live:**
@@ -251,8 +255,12 @@ operator fee; static export; MIT license and trademark docs.
   registry `getProgramAccounts` scan.
 - Static export excludes all route handlers. Static deployments cannot use `/api/*`
   routes or same-origin `/rpc`.
-- Process-local social storage works in node mode, but show-cards/player-notes are
-  in-memory unless an operator adds a persistent store.
+- Static export removes the dynamic `/profile/<wallet>` route. Use
+  `/profile?address=<wallet>` for static-safe profile links.
+- Process-local social storage works in node mode, but player notes and the
+  disabled show-cards route scaffolding are in-memory unless an operator adds a
+  persistent store; the show-cards UI trigger is disabled by default in this
+  source release.
 - Indexer operation is not free-pool infrastructure. It needs MongoDB and a
   paid/dedicated RPC; production FULL/live updates also need stream credentials.
 - Legal copy still needs operator replacement before a public white-label release.

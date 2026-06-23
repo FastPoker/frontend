@@ -22,6 +22,11 @@ if [ -d 'src/app/profile/[address]' ]; then
   mv 'src/app/profile/[address]' "$PROFILE_DYNAMIC_STASH"
 fi
 
+# The export build uses its own distDir (.next-export, set in next.config.js when
+# NEXT_OUTPUT=export), so it never shares route-type validators or build state with
+# a node `next build`/`next dev`/`next start` on `.next`. That makes the documented
+# `npm run build && npm run build:static` sequence safe and lets this run alongside
+# a live dev server without 404'ing its /api routes. `out/` is still the final export.
 NEXT_PUBLIC_STATIC_EXPORT=true NEXT_OUTPUT=export next build
 
 echo ""

@@ -29,7 +29,8 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const network = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER || '').toLowerCase().startsWith('mainnet')
+  const cluster = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER || 'mainnet').toLowerCase();
+  const network = cluster.startsWith('mainnet')
     ? WalletAdapterNetwork.Mainnet
     : WalletAdapterNetwork.Devnet;
 

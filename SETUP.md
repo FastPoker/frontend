@@ -66,6 +66,8 @@ Pages, Netlify, or Vercel static hosting.
 Static LIGHT has no server route handlers. It cannot run `/api/indexer`, `/rpc`,
 `/api/cash-game/*`, `/api/sitngos/ready`, or `/api/tee/token`. It can still build
 wallet-signed player transactions and talk directly to Solana RPC and the TEE.
+Static profile links should use `/profile?address=<wallet>` because the dynamic
+`/profile/<wallet>` route is removed from static export.
 
 ## 4. Node Server Source Run
 

@@ -23,9 +23,9 @@ features.
   route handlers run in this profile.
 - **Node server** - `npm run build && npm start` runs the same app with Next route
   handlers for same-origin `/rpc`, token metadata/history helpers, process-local
-  show-cards/player-notes, and cash/SNG relay APIs. A hosted Node server can use
-  the operator's private `L1_RPC` so normal users do not need to configure their
-  own RPC.
+  player-notes, disabled show-cards relay scaffolding, and cash/SNG relay APIs.
+  A hosted Node server can use the operator's private `L1_RPC` so normal users do
+  not need to configure their own RPC.
 - **FULL source mode** - run the Next node server plus the separate `Indexer`
   source package and your own MongoDB. This is the full read experience: history,
   leaderboards, standalone profiles/achievements, richer lobby stats, per-wallet
@@ -46,6 +46,7 @@ If you are new to this repo or to running Solana frontends, start with
   wallet.
 - Create cash tables, sit, play, claim, and leave through player-signed on-chain
   transactions.
+- Manage private cash-table wallet whitelists at `/my-tables/whitelist`.
 - Use `/earn` to burn/stake `$FP` and claim wallet rewards.
 - Use `/auctions` to bid SOL for token listings.
 - Use `/dealer/license` to mint dealer licenses from the registry program.
@@ -80,19 +81,18 @@ use your same-origin RPC proxy instead of bringing their own endpoint.
 ### RPC provider notes
 
 A free Helius key is reasonable for local MVR/frontend smoke testing, but not a
-production FULL setup by itself. As of the current Helius docs, the free plan is
-limited to 1M credits/month, 10 RPC requests/second, 5 `getProgramAccounts`/second,
-1 `sendTransaction`/second, and standard LaserStream WebSocket methods. It does
-not provide mainnet LaserStream gRPC. That means:
+production FULL setup by itself. Provider limits and plan names change, so treat
+the exact quota as something to verify with the provider before launch. The
+important repo requirement is simpler:
 
 - Browser/local frontend: a free Helius HTTP+WSS pair can work for testing, but
   users may hit quotas during table discovery, polling, or transaction-heavy play.
 - Hosted Node frontend: prefer server-side `L1_RPC` plus
   `NEXT_PUBLIC_L1_RPC_URL=/rpc` so end users do not need to paste RPCs.
 - FULL/indexer mode: the frontend can read from your indexer, but the indexer
-  itself still needs enough RPC/stream capacity. A seeded or non-streaming indexer
-  can lag; delegated cash-table occupancy is only treated as live after the web
-  server overlays the current TEE account state.
+  itself still needs enough paid/dedicated RPC and stream capacity. A seeded or
+  non-streaming indexer can lag; delegated cash-table occupancy is only treated as
+  live after the web server overlays the current TEE account state.
 
 ## Requirements By Mode
 
@@ -119,8 +119,10 @@ See `.env.example` for the common LIGHT and node-server settings:
 - Privy is off by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable it; email, Google, X, and
   Apple login buttons each have their own `NEXT_PUBLIC_PRIVY_LOGIN_*` opt-in flag.
-- `NEXT_PUBLIC_ENABLE_PROFILES` and `NEXT_PUBLIC_ENABLE_ACHIEVEMENTS` - read-only
-  public profile surfaces, enabled by default; set `0`/`false` to hide them.
+- `NEXT_PUBLIC_ENABLE_PROFILES` and `NEXT_PUBLIC_ENABLE_ACHIEVEMENTS` -
+  read-only profile enrichment and achievement panels. The public profile route
+  remains present; set profiles to `0`/`false` only to suppress optional profile
+  API/enrichment reads, and achievements to `0`/`false` to hide achievement UI.
 - `NEXT_PUBLIC_OPERATOR_FEE_WALLET`, `NEXT_PUBLIC_SNG_FEE_BPS`,
   `NEXT_PUBLIC_SNG_FEE_FLAT_SOL`, `NEXT_PUBLIC_CASH_FEE_BPS`,
   `NEXT_PUBLIC_CASH_FEE_FLAT_SOL`, and `NEXT_PUBLIC_OPERATOR_FEE_CAP_SOL` -
@@ -172,7 +174,8 @@ npm run build:static
 Upload `out/` anywhere. The static build has no route handlers, so it cannot use
 `/api/indexer`, `/rpc`, `/api/tables/list`, `/api/my-sng-tables`, or cash/SNG
 relay APIs. Users can still provide a capable RPC endpoint in-app for table
-discovery.
+discovery. Static profile share links should use `/profile?address=<wallet>`;
+the dynamic `/profile/<wallet>` route is node-build only.
 
 ## Source FULL mode
 
@@ -207,7 +210,9 @@ Cash table listing in FULL mode uses the web app's `/api/tables/list` route. Tha
 route reads the indexer's raw table cache first when `NEXT_PUBLIC_ENABLE_INDEXER=true`
 and `INDEXER_BASE_URL` is set. If the indexer is disabled, cold, or unreachable,
 the route falls back to direct RPC scans when the Node server has a configured
-server RPC.
+server RPC. In the browser UI, global cash/watch discovery is also behind the
+RPC settings panel's **Full** request level; Minimal keeps the request footprint
+small for the free public pool.
 
 ## Release hygiene
 

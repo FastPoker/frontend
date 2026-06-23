@@ -43,6 +43,12 @@ const isExport = process.env.NEXT_OUTPUT === 'export';
 
 const nextConfig = {
   reactStrictMode: true,
+  // Give the static-export build its OWN intermediate build dir. `next dev`,
+  // `next build`, and `next start` all share `.next`; running `npm run build:static`
+  // against the same folder as a live dev server would otherwise overwrite that
+  // server's route manifest and make every /api/* 404 until it recompiles.
+  // Isolating the export build to `.next-export` keeps `out/` as the final output.
+  distDir: isExport ? '.next-export' : '.next',
   ...(isExport ? { output: 'export' } : {}),
   env: {
     NEXT_PUBLIC_BUILD_HASH: BUILD_HASH,

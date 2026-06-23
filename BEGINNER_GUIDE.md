@@ -106,6 +106,10 @@ That makes browser HTTP RPC calls go through your same-origin `/rpc` route while
 the private upstream URL stays server-side. The WebSocket URL still needs to be
 browser-reachable because `/rpc` only proxies HTTP.
 
+The app also has a request-level control in the RPC settings panel. Minimal is
+the default and keeps requests low for the free public pool. Switch to Full when
+you want global cash-table and watch-table discovery.
+
 ## Static LIGHT Build
 
 Use this when you want a static website artifact:
@@ -124,6 +128,9 @@ external operator network.
 
 Do not set `NEXT_PUBLIC_L1_RPC_URL=/rpc` for a static-only deployment because
 there is no `/rpc` server route in `out/`.
+
+For profile links in a static build, use `/profile?address=<wallet>`. The dynamic
+`/profile/<wallet>` page is removed during static export.
 
 ## Node Server Run
 

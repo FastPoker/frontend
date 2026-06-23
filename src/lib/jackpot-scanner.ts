@@ -163,8 +163,8 @@ export async function getRecentReceipts(limit: number): Promise<JackpotReceipt[]
 export async function getLeaderboardReceipts(): Promise<JackpotReceipt[]> {
   if (JACKPOT_INDEXER_URL) {
     // Reuse the indexer's recent endpoint at MAX_RECEIPTS to seed the
-    // leaderboard window. The indexer holds the full history in SQLite,
-    // so an upper bound of MAX_RECEIPTS keeps payloads manageable while
+    // leaderboard window. The unified indexer holds the full history in
+    // MongoDB, so an upper bound of MAX_RECEIPTS keeps payloads manageable while
     // the existing top/biggest aggregation already has its dedicated
     // paths exposed by the route layer.
     const body = await fetchFromIndexer<{ receipts: JackpotReceipt[] }>(

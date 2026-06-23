@@ -295,7 +295,7 @@ export function FooterStrip() {
           </div>
 
           <span className="font-mono text-[9px] text-boneDim/50 tracking-wider hidden lg:inline">
-            {process.env.NEXT_PUBLIC_SOLANA_CLUSTER || 'devnet'}
+            {process.env.NEXT_PUBLIC_SOLANA_CLUSTER || 'mainnet'}
           </span>
 
           <div className="h-3 w-px bg-orange/15 hidden md:block" />
