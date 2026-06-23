@@ -165,6 +165,10 @@ Client env examples live in `.env.example`. The `Indexer` package has its own
 - **Privy:** disabled by default. Set your own `NEXT_PUBLIC_PRIVY_APP_ID` plus
   `NEXT_PUBLIC_PRIVY_LOGIN_ENABLED=true` to enable Privy; email, Google, X, and
   Apple login buttons each require their own `NEXT_PUBLIC_PRIVY_LOGIN_*` flag.
+- **Navbar visibility:** optional content pages default to visible in the nav.
+  Set `NEXT_PUBLIC_NAV_EARN`, `NEXT_PUBLIC_NAV_AUCTIONS`, `NEXT_PUBLIC_NAV_DEALER`,
+  or `NEXT_PUBLIC_NAV_HOW_TO_PLAY` to `0`/`false` to hide that nav entry. The route
+  stays reachable; only the navbar link is dropped. Inlined at build time.
 - **Indexer wiring:** client root sets `NEXT_PUBLIC_ENABLE_INDEXER=true` plus
   `INDEXER_BASE_URL` for indexed frontend reads; optional
   `NEXT_PUBLIC_INDEXER_WS_URL` enables browser live push. `Indexer` owns

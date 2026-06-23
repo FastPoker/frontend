@@ -8,20 +8,28 @@ import { cn } from '@/lib/utils';
 import { BRAND } from '@/lib/branding';
 import { ProfilePill } from './ProfilePill';
 import { SngJackpotRail } from '@/components/jackpot/SngJackpotRail';
+import {
+  NAV_EARN_VISIBLE,
+  NAV_AUCTIONS_VISIBLE,
+  NAV_DEALER_VISIBLE,
+  NAV_HOW_TO_PLAY_VISIBLE,
+} from '@/lib/feature-flags';
 
-type NavItem = { href: string; label: string };
+type NavItem = { href: string; label: string; visible?: boolean };
 
 // Standalone: only the routes that exist in this build.
+// Optional content pages are gated on NEXT_PUBLIC_NAV_* flags (default VISIBLE);
+// the route stays, only the nav entry is dropped when a flag is set to 0/false.
 const LEFT_NAV: NavItem[] = [
   { href: '/lobby', label: 'LOBBY' },
-  { href: '/earn', label: 'EARN' },
-  { href: '/auctions', label: 'AUCTIONS' },
-];
+  { href: '/earn', label: 'EARN', visible: NAV_EARN_VISIBLE },
+  { href: '/auctions', label: 'AUCTIONS', visible: NAV_AUCTIONS_VISIBLE },
+].filter(item => item.visible !== false);
 
 const RIGHT_NAV: NavItem[] = [
-  { href: '/dealer/license', label: 'DEALER' },
-  { href: '/how-to-play', label: 'HOW TO' },
-];
+  { href: '/dealer/license', label: 'DEALER', visible: NAV_DEALER_VISIBLE },
+  { href: '/how-to-play', label: 'HOW TO', visible: NAV_HOW_TO_PLAY_VISIBLE },
+].filter(item => item.visible !== false);
 
 function isActive(pathname: string, href: string): boolean {
   if (href === '/lobby') return pathname === '/lobby';
