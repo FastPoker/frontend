@@ -5,7 +5,10 @@ const eslintConfig = [
   {
     ignores: [
       '.next/**',
+      '.next-export/**',
       'out/**',
+      'build/**',
+      'dist/**',
       'node_modules/**',
       'indexer/**',
       'next-env.d.ts',
