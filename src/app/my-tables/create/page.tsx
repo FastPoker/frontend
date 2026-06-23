@@ -40,7 +40,7 @@ import {
 } from '@magicblock-labs/ephemeral-rollups-sdk';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { makeL1Connection, POKER_MINT, USDC_MINT, TREASURY, ANCHOR_PROGRAM_ID, POOL_PDA } from '@/lib/constants';
+import { makeL1Connection, POKER_MINT, USDC_MINT, TREASURY, ANCHOR_PROGRAM_ID, POOL_PDA, requiresTokenTierConfig } from '@/lib/constants';
 import { applyPriorityFee } from '@/lib/priority-fee';
 import { BRAND } from '@/lib/branding';
 import { invalidateMyCashTables } from '@/lib/table-discovery';
@@ -75,6 +75,7 @@ import {
   getCrankTallyL1Pda,
   getTipJarPda,
   getSplRewardPoolPda,
+  getTokenTierConfigPda,
   getMultipleAccountsInfoChunked,
 } from '@/lib/onchain-game';
 
@@ -127,6 +128,7 @@ const BLIND_PRESETS: Record<string, { sb: number; bb: number; label: string }[]>
     { sb: 25_000_000_000, bb: 50_000_000_000, label: '25 / 50' },
   ],
   USDC: [
+    { sb: 50_000, bb: 100_000, label: '0.05 / 0.1' },
     { sb: 500_000, bb: 1_000_000, label: '0.5 / 1' },
     { sb: 1_000_000, bb: 2_000_000, label: '1 / 2' },
     { sb: 2_500_000, bb: 5_000_000, label: '2.5 / 5' },
@@ -158,6 +160,27 @@ const STEP_LABELS: Record<SetupStep, string> = {
 };
 
 const DELEG_PROG_ID = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
+const LAMPORTS_PER_SOL_NUM = 1_000_000_000;
+const FLAT_CREATE_FEE_SOL = 0.05;
+const ATA_RENT_SOL_ESTIMATE = 0.0021;
+const DLP_DEPOSIT_PER_DELEGATED_SOL = 0.001559 + 0.001573;
+const PERMISSION_RENT_SOL = 0.004837;
+const TOKEN_TIER_MIN_BB_FALLBACK: Record<string, bigint> = {
+  SOL: 1_000n,
+  USDC: 100_000n,
+};
+const TOKEN_TIER_MIN_BB_OFFSET = 180;
+const CAP_BPS_BY_TIER_AND_TABLE = [
+  [0, 0, 0],
+  [30000, 50000, 80000],
+  [20000, 40000, 60000],
+  [10000, 25000, 40000],
+  [5000, 10000, 15000],
+  [2500, 5000, 7500],
+  [900, 1500, 2000],
+];
+const SOL_TIER_BOUNDARIES = [10_000_000, 25_000_000, 50_000_000, 100_000_000, 500_000_000, 1_000_000_000, Infinity];
+const USDC_TIER_BOUNDARIES = [1_000_000, 2_500_000, 5_000_000, 10_000_000, 50_000_000, 100_000_000, Infinity];
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 function cx(...args: (string | boolean | null | undefined)[]) {
@@ -177,6 +200,58 @@ function parseTokenUnitsExact(input: string, decimals: number): bigint | null {
 function minSmallBlindRawForDecimals(decimals: number): bigint {
   if (decimals <= 4) return 1n;
   return 10n ** BigInt(decimals - 4);
+}
+
+function teeDepositSol(seats: number): { dlp: number; permission: number; total: number } {
+  const dlp = (6 + 2 * seats) * DLP_DEPOSIT_PER_DELEGATED_SOL;
+  const permission = (2 + 2 * seats) * PERMISSION_RENT_SOL;
+  return { dlp, permission, total: dlp + permission };
+}
+
+function knownFastPokerRentSpaces(seats: number): number[] {
+  return [
+    478,
+    113,
+    81,
+    75,
+    241,
+    205,
+    205,
+    ...Array.from({ length: seats }, () => 284),
+    ...Array.from({ length: seats }, () => 76),
+    ...Array.from({ length: seats }, () => 90),
+    ...Array.from({ length: seats }, () => 131),
+  ];
+}
+
+function localRentLamports(size: number): number {
+  return (128 + size) * 3480 * 2;
+}
+
+function tableTypeIndex(maxPlayers: number): number {
+  if (maxPlayers === 2) return 0;
+  if (maxPlayers <= 6) return 1;
+  return 2;
+}
+
+function tierIndexForBoundary(bigBlind: bigint, boundaries: number[]): number {
+  const bb = Number(bigBlind);
+  const idx = boundaries.findIndex((max) => bb <= max);
+  return idx >= 0 ? idx : boundaries.length - 1;
+}
+
+function rakeCapLine(symbol: string, bigBlind: bigint, maxPlayers: number): string {
+  const boundaries = symbol === 'SOL'
+    ? SOL_TIER_BOUNDARIES
+    : symbol === 'USDC'
+      ? USDC_TIER_BOUNDARIES
+      : null;
+  if (!boundaries) return `${RAKE_PCT}% of pot`;
+  const tier = tierIndexForBoundary(bigBlind, boundaries);
+  const bps = CAP_BPS_BY_TIER_AND_TABLE[tier]?.[tableTypeIndex(maxPlayers)] ?? 0;
+  if (bps === 0) return `${RAKE_PCT}% of pot - no cap at this blind tier`;
+  const capBb = bps / 10_000;
+  return `${RAKE_PCT}% of pot - cap ${capBb.toLocaleString(undefined, { maximumFractionDigits: 2 })} BB`;
 }
 
 function formatTokenUnits(raw: bigint, decimals: number): string {
@@ -336,6 +411,7 @@ export default function CreateTablePage() {
   const { teeConnection, teeAuthenticated } = useGameAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const conn = useMemo(() => makeL1Connection(), []);
 
   // Batch-sign support: when the wallet can't signAllTransactions, fall back to
   // signing each tx individually (one popup per tx).
@@ -359,6 +435,10 @@ export default function CreateTablePage() {
   const [listedTokens, setListedTokens] = useState<ListedTokenInfo[]>([]);
   const [listedLoading, setListedLoading] = useState(false);
   const [selectedListed, setSelectedListed] = useState<ListedTokenInfo | null>(null);
+  const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [tokenBalanceRaw, setTokenBalanceRaw] = useState<bigint | null>(null);
+  const [knownRentEstimateSol, setKnownRentEstimateSol] = useState<number | null>(null);
+  const [tierMinBigBlindRaw, setTierMinBigBlindRaw] = useState<bigint | null>(null);
 
   // ── Multi-step state ──
   const [step, setStep] = useState<SetupStep>('config');
@@ -459,6 +539,29 @@ export default function CreateTablePage() {
   const effectiveCustomMode = customMode || !presets;
   const listedTokenDecimalsValid = tokenCategory !== 'listed' || denom.decimals >= MIN_LISTED_TOKEN_DECIMALS;
   const activePreset = presets ? (presets[presetIdx] || presets[0]) : null;
+  const denomMintStr = denom.mint.toBase58();
+
+  useEffect(() => {
+    if (!requiresTokenTierConfig(denom.mint)) {
+      setTierMinBigBlindRaw(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const info = await conn.getAccountInfo(getTokenTierConfigPda(denom.mint), 'confirmed');
+        if (cancelled) return;
+        if (!info || info.data.length < TOKEN_TIER_MIN_BB_OFFSET + 8) {
+          setTierMinBigBlindRaw(null);
+          return;
+        }
+        setTierMinBigBlindRaw(Buffer.from(info.data).readBigUInt64LE(TOKEN_TIER_MIN_BB_OFFSET));
+      } catch {
+        if (!cancelled) setTierMinBigBlindRaw(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [conn, denomMintStr, denom.mint]);
 
   const displaySb = useMemo(() => {
     if (effectiveCustomMode) return parseFloat(customSB) || 0;
@@ -472,8 +575,17 @@ export default function CreateTablePage() {
   }, [effectiveCustomMode, customBB, activePreset, denom.decimals]);
 
   const stakesUnit = denom.symbol === 'POKER' ? '$FP' : denom.symbol;
-  const minSmallBlindRaw = useMemo(() => minSmallBlindRawForDecimals(denom.decimals), [denom.decimals]);
-  const minBigBlindRaw = minSmallBlindRaw * 2n;
+  const genericMinSmallBlindRaw = useMemo(() => minSmallBlindRawForDecimals(denom.decimals), [denom.decimals]);
+  const fallbackMinBigBlindRaw = requiresTokenTierConfig(denom.mint) ? (TOKEN_TIER_MIN_BB_FALLBACK[denom.symbol] ?? null) : null;
+  const protocolMinBigBlindRaw = tierMinBigBlindRaw ?? fallbackMinBigBlindRaw;
+  const genericMinBigBlindRaw = genericMinSmallBlindRaw * 2n;
+  const minBigBlindRaw = protocolMinBigBlindRaw && protocolMinBigBlindRaw > genericMinBigBlindRaw
+    ? protocolMinBigBlindRaw
+    : genericMinBigBlindRaw;
+  const protocolMinSmallBlindRaw = (minBigBlindRaw + 1n) / 2n;
+  const minSmallBlindRaw = protocolMinSmallBlindRaw > genericMinSmallBlindRaw
+    ? protocolMinSmallBlindRaw
+    : genericMinSmallBlindRaw;
   const minBlindLabel = `${formatTokenUnits(minSmallBlindRaw, denom.decimals)} / ${formatTokenUnits(minBigBlindRaw, denom.decimals)} ${stakesUnit}`;
 
   const { smallBlind, bigBlind, blindsValid, blindError } = useMemo(() => {
@@ -506,7 +618,65 @@ export default function CreateTablePage() {
   const denomFee = bigBlind * BigInt(buyInInfo.feeMult);
   const denomFeeDisplayAmount = Number(denomFee) / 10 ** denom.decimals;
   const denomFeeDisplay = `${denomFeeDisplayAmount.toLocaleString(undefined, { maximumFractionDigits: 9 })} ${stakesUnit}`;
-  const protocolSolFee = 0.05 + (isSol ? denomFeeDisplayAmount : 0);
+  const protocolSolFee = FLAT_CREATE_FEE_SOL + (isSol ? denomFeeDisplayAmount : 0);
+  const teeDeposit = teeDepositSol(maxPlayers);
+  const ataRentSol = isSol ? 0 : ATA_RENT_SOL_ESTIMATE;
+  const totalCostSol = protocolSolFee + (knownRentEstimateSol ?? 0) + teeDeposit.total + ataRentSol;
+  const refundableSol = (knownRentEstimateSol ?? 0) + teeDeposit.dlp + teeDeposit.permission + ataRentSol;
+  const requiredSol = totalCostSol + 0.006;
+  const solInsufficient = solBalance !== null && solBalance < requiredSol;
+  const tokenInsufficient = !isSol && tokenBalanceRaw !== null && tokenBalanceRaw < denomFee;
+  const tokenBalanceDisplay = tokenBalanceRaw !== null ? Number(tokenBalanceRaw) / 10 ** denom.decimals : null;
+  const rakeLine = rakeCapLine(denom.symbol, bigBlind, maxPlayers);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setSolBalance(null);
+      setTokenBalanceRaw(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const lamports = await conn.getBalance(publicKey, 'confirmed');
+        if (!cancelled) setSolBalance(lamports / LAMPORTS_PER_SOL_NUM);
+      } catch {
+        if (!cancelled) setSolBalance(null);
+      }
+      if (isSol) {
+        if (!cancelled) setTokenBalanceRaw(null);
+        return;
+      }
+      try {
+        const ata = await getAssociatedTokenAddress(denom.mint, publicKey, false);
+        const balance = await conn.getTokenAccountBalance(ata);
+        if (!cancelled) setTokenBalanceRaw(BigInt(balance.value.amount));
+      } catch {
+        if (!cancelled) setTokenBalanceRaw(0n);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [conn, denom.mint, denomMintStr, isSol, publicKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sizes = knownFastPokerRentSpaces(maxPlayers);
+    (async () => {
+      try {
+        const uniqueSizes = Array.from(new Set(sizes));
+        const rents = await Promise.all(uniqueSizes.map(size => conn.getMinimumBalanceForRentExemption(size)));
+        if (cancelled) return;
+        const bySize = new Map(uniqueSizes.map((size, i) => [size, rents[i]]));
+        const total = sizes.reduce((sum, size) => sum + (bySize.get(size) ?? localRentLamports(size)), 0);
+        setKnownRentEstimateSol(total / LAMPORTS_PER_SOL_NUM);
+      } catch {
+        if (cancelled) return;
+        const total = sizes.reduce((sum, size) => sum + localRentLamports(size), 0);
+        setKnownRentEstimateSol(total / LAMPORTS_PER_SOL_NUM);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [conn, maxPlayers]);
 
   const isProcessing = step !== 'config' && step !== 'done';
   const fmt = (n: number, d = 3) => Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(d);
@@ -1033,7 +1203,7 @@ export default function CreateTablePage() {
 
   const stepOrder: SetupStep[] = ['config', 'creating', 'init-seats', 'delegating', 'done'];
   const stepIdx = stepOrder.indexOf(step);
-  const canCreate = blindsValid && !(tokenCategory === 'listed' && !selectedListed);
+  const canCreate = blindsValid && !(tokenCategory === 'listed' && !selectedListed) && !solInsufficient && !tokenInsufficient;
 
   // ─── RENDER ─────────────────────────────────────────────────────────────
   return (
@@ -1229,6 +1399,9 @@ export default function CreateTablePage() {
                 {!presets && (
                   <div className="font-mono text-[9.5px] text-boneDim/50 tracking-wide mt-1.5">enter blind values in {stakesUnit}; minimum {minBlindLabel}</div>
                 )}
+                {presets && (
+                  <div className="font-mono text-[9.5px] text-boneDim/50 tracking-wide mt-1.5">protocol minimum {minBlindLabel}</div>
+                )}
               </div>
 
               {/* BUY-IN TYPE */}
@@ -1263,19 +1436,34 @@ export default function CreateTablePage() {
                 <SummaryRow label="Buy-in range" value={<span className="font-display text-bone tabular-nums">{buyInInfo.minBB}-{buyInInfo.maxBB} BB{buyInType === 'deep' ? ', deep' : ''}</span>} />
                 <SummaryRow label="Access" value={isPrivate ? <span className="font-display text-gold">Private · whitelist</span> : <span className="font-display text-bone">Public</span>} />
                 <SummaryRow label="Creator rake" tone="emerald" value={<span className="font-display">{CREATOR_SHARE}% of {RAKE_PCT}% pot rake</span>}
-                  sub={<span>{DEALER_SHARE}% dealers, {STAKER_SHARE}% stakers, {TREASURY_SHARE}% Platform Fee</span>} />
+                  sub={<span>{rakeLine} <span className="text-boneDim/50 ml-1">· remaining rake: {DEALER_SHARE}% dealers, {STAKER_SHARE}% stakers, {TREASURY_SHARE}% Platform Fee</span></span>} />
                 <div className="h-px bg-white/[0.06]" />
                 <SummaryRow label="SOL protocol fee" tone="amber"
-                  value={<span className="font-display text-amber tabular-nums">~{protocolSolFee.toFixed(3)} SOL</span>}
-                  sub={<span>{isSol ? `0.05 SOL flat + ${denomFeeDisplay} denomination fee` : '0.05 SOL flat fee'}</span>} />
+                  value={<span className="font-display text-amber tabular-nums">{protocolSolFee.toFixed(3)} SOL</span>}
+                  sub={<span className="text-rose-300">{isSol ? `0.05 SOL flat + ${denomFeeDisplay} denomination fee` : '0.05 SOL flat fee via Steel'}</span>} />
                 {!isSol && (
                   <SummaryRow label="Token denomination fee" tone="amber"
                     value={<span className="font-display text-amber tabular-nums">{denomFeeDisplay}</span>}
                     sub={<span>Charged in {stakesUnit}; split between Platform Fee and staker pool</span>} />
                 )}
                 <SummaryRow label="Table setup & rent" tone="emerald"
-                  value={<span className="font-display text-emerald-300 tabular-nums">refundable</span>}
-                  sub={<span className="text-emerald-300">Account rent + private-layer deposits are reclaimable later by closing an eligible empty table.</span>} />
+                  value={<span className="font-display text-emerald-300 tabular-nums">{knownRentEstimateSol == null ? 'calculating...' : `~${refundableSol.toFixed(4)} SOL`}</span>}
+                  sub={<span className="text-emerald-300">Refundable later by closing an eligible empty table.{!isSol ? ` Token tables include about ${ATA_RENT_SOL_ESTIMATE.toFixed(4)} SOL of refundable setup rent.` : ''}</span>} />
+                <div className="h-px bg-white/[0.06]" />
+                <SummaryRow label="Total to create"
+                  value={<span className="font-display text-bone tabular-nums text-[15px]">{knownRentEstimateSol == null ? 'calculating...' : `~${totalCostSol.toFixed(4)} SOL`}</span>}
+                  sub={<span>Plus a small per-transaction network fee.</span>} />
+                {(solInsufficient || tokenInsufficient) && (
+                  <div className="px-4 py-3 border-t border-red-500/20 bg-red-500/[0.07] font-mono text-[10px] text-red-300 leading-relaxed space-y-1">
+                    <div className="tracking-[0.16em] uppercase text-red-300/90">Not enough funds</div>
+                    {solInsufficient && solBalance !== null && (
+                      <div>Need ~{requiredSol.toFixed(4)} SOL (fees + setup/rent), wallet has {solBalance.toFixed(4)} SOL.</div>
+                    )}
+                    {tokenInsufficient && (
+                      <div>Need {denomFeeDisplayAmount.toLocaleString(undefined, { maximumFractionDigits: 9 })} {stakesUnit} for the denomination fee, wallet has {(tokenBalanceDisplay ?? 0).toLocaleString(undefined, { maximumFractionDigits: 9 })}.</div>
+                    )}
+                  </div>
+                )}
                 <div className="px-4 py-2 font-mono text-[9.5px] text-boneDim/50 tracking-wide leading-relaxed">
                   3 setup stages, all signed by your wallet. Keep this tab open until setup finishes.
                 </div>
@@ -1295,7 +1483,15 @@ export default function CreateTablePage() {
                     : step === 'done' ? 'bg-emerald-500/20 border border-emerald-400/50 text-emerald-300'
                       : isProcessing ? 'bg-orange/10 border border-orange/30 text-orange cursor-wait' : 'btn-orange')}>
                 {!canCreate
-                  ? (tokenCategory === 'listed' && !selectedListed ? 'Select a token first' : 'Set valid blinds')
+                  ? (tokenCategory === 'listed' && !selectedListed
+                    ? 'Select a token first'
+                    : !blindsValid
+                      ? 'Set valid blinds'
+                      : solInsufficient
+                        ? 'Need more SOL'
+                        : tokenInsufficient
+                          ? `Need more ${stakesUnit}`
+                          : 'Create unavailable')
                   : step === 'done' ? 'Table Live - Redirecting...'
                     : isProcessing ? STEP_LABELS[step] : 'Create & Setup Table'}
               </button>
