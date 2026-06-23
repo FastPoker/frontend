@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { makeL1Connection, TIERS, SnGTier, POKER_MINT, USDC_MAINNET_MINT, USDC_DEVNET_MINT, SNG_MINI_ADDON_LAMPORTS, L1_RPC } from '@/lib/constants';
 import { RequestLevelGate } from '@/components/system/RequestLevelGate';
 import { CashStandalone } from '@/components/lobby/CashStandalone';
-import { levelAtLeast } from '@/lib/user-config';
+import { hasUserRpc, levelAtLeast } from '@/lib/user-config';
 import { calculateSngPoolUnrefined, calculateSngEmissionPerSeat, decayMultiplierBps, EmissionFormat } from '@/lib/emission';
 import { EmissionGaugeFull } from '@/components/lobby/EmissionGauge';
 import { SizeInPlayToMint } from '@/components/lobby/SizeInPlayToMint';
@@ -138,7 +138,10 @@ async function fetchTableListWithStandaloneFallback(
       const tables = Array.isArray(data?.tables)
         ? data.tables.filter((table: any): table is CashTable => typeof table?.pubkey === 'string')
         : [];
-      if (data?.serverRpcConfigured !== false || data?.indexerEnabled === true) {
+      const shouldTryClientRpc =
+        data?.indexerEnabled !== true &&
+        (data?.serverRpcConfigured === false || (tables.length === 0 && hasUserRpc()));
+      if (!shouldTryClientRpc && (data?.serverRpcConfigured !== false || data?.indexerEnabled === true)) {
         return { ...data, tables };
       }
     }
@@ -3712,6 +3715,41 @@ export function Lobby(props: LobbyProps) {
     if (mode !== 'my' && creatorTables.length > 0) return; // already loaded, skip re-fetch unless on tab
     let cancelled = false;
     const PHASE_NAMES = ['Waiting', 'Starting', 'Preflop', 'Flop', 'Turn', 'River', 'Showdown', 'Complete'];
+    const mapDiscoveredCreatorTable = (d: {
+      pubkey: string;
+      state: {
+        smallBlind: number;
+        bigBlind: number;
+        maxPlayers: number;
+        currentPlayers: number;
+        phase: number;
+        tokenMint: string;
+        isPrivate: boolean;
+      };
+      isDelegated: boolean;
+    }): CreatorTable => {
+      const ts = d.state;
+      const tokenSymbol = getTokenSymbol(ts.tokenMint);
+      return {
+        pubkey: d.pubkey,
+        gameTypeName: 'Cash Game',
+        smallBlind: ts.smallBlind,
+        bigBlind: ts.bigBlind,
+        maxPlayers: ts.maxPlayers,
+        currentPlayers: ts.currentPlayers,
+        rakeAccumulated: 0,
+        creatorRakeTotal: 0,
+        vaultTotalRakeDistributed: 0,
+        phase: PHASE_NAMES[ts.phase] ?? 'Unknown',
+        tokenSymbol,
+        tokenMint: ts.tokenMint,
+        decimals: tokenSymbol === 'USDC' ? 6 : 9,
+        isLegacy: false,
+        rakeCap: 0,
+        isDelegated: d.isDelegated,
+        isPrivate: ts.isPrivate,
+      };
+    };
     const fetchCreator = async () => {
       if (!fullRequestMode) {
         setCreatorLoading(true);
@@ -3720,32 +3758,10 @@ export function Lobby(props: LobbyProps) {
           const { discoverMyCashTables } = await import('@/lib/table-discovery');
           // Shared, cached discovery (created + seated). My Tables lists tables you
           // HOST, so filter to ones you created — matching the original design.
-          const discovered = (await discoverMyCashTables(me).catch(() => []))
+          const discovered = (await discoverMyCashTables(me, { force: mode === 'my' }).catch(() => []))
             .filter((d) => d.state.creator.toBase58() === me);
           if (cancelled) return;
-          const tables: CreatorTable[] = discovered.map((d) => {
-            const ts = d.state;
-            const tokenSymbol = getTokenSymbol(ts.tokenMint);
-            return {
-              pubkey: d.pubkey,
-              gameTypeName: 'Cash Game',
-              smallBlind: ts.smallBlind,
-              bigBlind: ts.bigBlind,
-              maxPlayers: ts.maxPlayers,
-              currentPlayers: ts.currentPlayers,
-              rakeAccumulated: 0,
-              creatorRakeTotal: 0,
-              vaultTotalRakeDistributed: 0,
-              phase: PHASE_NAMES[ts.phase] ?? 'Unknown',
-              tokenSymbol,
-              tokenMint: ts.tokenMint,
-              decimals: tokenSymbol === 'USDC' ? 6 : 9,
-              isLegacy: false,
-              rakeCap: 0,
-              isDelegated: d.isDelegated,
-              isPrivate: ts.isPrivate,
-            };
-          });
+          const tables: CreatorTable[] = discovered.map(mapDiscoveredCreatorTable);
           if (!cancelled) setCreatorTables(tables);
         } catch (e) {
           if (!cancelled) console.warn('[standalone] on-chain creator-tables discovery failed', e);
@@ -3762,6 +3778,17 @@ export function Lobby(props: LobbyProps) {
         );
         const creatorAccounts = data.tables || [];
         if (cancelled) return;
+        if (creatorAccounts.length === 0 && data.indexerEnabled !== true && hasUserRpc()) {
+          const me = publicKey.toBase58();
+          const { discoverMyCashTables } = await import('@/lib/table-discovery');
+          const discovered = (await discoverMyCashTables(me, { force: true }).catch(() => []))
+            .filter((d) => d.isCreated || d.state.creator.toBase58() === me);
+          if (cancelled) return;
+          if (discovered.length > 0) {
+            setCreatorTables(discovered.map(mapDiscoveredCreatorTable));
+            return;
+          }
+        }
         const tables: CreatorTable[] = creatorAccounts.map((t: CashTable) => {
           const tokenSymbol = getTokenSymbol(t.tokenMint);
           return {

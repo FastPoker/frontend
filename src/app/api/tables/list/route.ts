@@ -14,6 +14,7 @@ import { attachTokenDecimals } from '@/lib/mint-decimals';
 import { getTableBlacklist } from '@/lib/table-blacklist';
 import { ANCHOR_PROGRAM_ID } from '@/lib/constants';
 import { indexerReadsEnabled } from '@/lib/indexer-env';
+import { decodeV2Accounts, getProgramAccountsV2 } from '@/lib/helius-tx';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,6 +88,100 @@ function getL1Connection(): Connection | null {
   }
 }
 
+function getL1RpcUrl(): string {
+  try {
+    return getL1Rpc();
+  } catch {
+    return '';
+  }
+}
+
+async function getProgramAccountPubkeys(
+  rpcUrl: string,
+  l1: Connection,
+  programId: PublicKey,
+  filters: any[],
+): Promise<PublicKey[]> {
+  try {
+    const accounts = await l1.getProgramAccounts(programId, {
+      filters,
+      dataSlice: { offset: 0, length: 0 },
+    });
+    return accounts.map((account) => account.pubkey);
+  } catch {
+    if (!rpcUrl) return [];
+  }
+
+  const out: PublicKey[] = [];
+  let paginationKey: string | undefined;
+  try {
+    do {
+      const page = await getProgramAccountsV2(rpcUrl, {
+        programId: programId.toBase58(),
+        filters,
+        dataSlice: { offset: 0, length: 0 },
+        paginationKey,
+      });
+      for (const account of page.accounts) {
+        try { out.push(new PublicKey(account.pubkey)); } catch {}
+      }
+      paginationKey = page.paginationKey ?? undefined;
+    } while (paginationKey);
+  } catch {
+    return [];
+  }
+  return out;
+}
+
+async function getProgramAccountEntries(
+  rpcUrl: string,
+  l1: Connection,
+  programId: PublicKey,
+  filters: any[],
+): Promise<TableEntry[]> {
+  try {
+    const accounts = await l1.getProgramAccounts(programId, { filters });
+    return accounts.map((a) => ({
+      pubkey: a.pubkey,
+      account: {
+        data: Buffer.from(a.account.data),
+        lamports: a.account.lamports,
+        owner: a.account.owner,
+      },
+    }));
+  } catch {
+    if (!rpcUrl) return [];
+  }
+
+  const out: TableEntry[] = [];
+  let paginationKey: string | undefined;
+  try {
+    do {
+      const page = await getProgramAccountsV2(rpcUrl, {
+        programId: programId.toBase58(),
+        filters,
+        paginationKey,
+      });
+      for (const account of decodeV2Accounts(page.accounts)) {
+        try {
+          out.push({
+            pubkey: new PublicKey(account.pubkey),
+            account: {
+              data: account.data,
+              lamports: account.lamports,
+              owner: new PublicKey(account.owner),
+            },
+          });
+        } catch {}
+      }
+      paginationKey = page.paginationKey ?? undefined;
+    } while (paginationKey);
+  } catch {
+    return [];
+  }
+  return out;
+}
+
 function parseTable(pubkey: PublicKey, data: Buffer, isDelegated: boolean) {
   if (data.length < 256 || Buffer.compare(data.subarray(0, 8), TABLE_DISC) !== 0) return null;
   const snapshotCurrentPlayers = data[OFF.CURRENT_PLAYERS];
@@ -158,9 +253,10 @@ async function scanProgramTables(l1: Connection): Promise<{
   delegatedAccounts: TableEntry[];
   undelegatedAccounts: TableEntry[];
 }> {
+  const rpcUrl = getL1RpcUrl();
   const [delKeys, undKeys] = await Promise.all([
-    l1.getProgramAccounts(DELEGATION_PROGRAM_ID, { filters: [discFilter], dataSlice: { offset: 0, length: 0 } }).catch(() => []),
-    l1.getProgramAccounts(PROGRAM_ID, { filters: [discFilter], dataSlice: { offset: 0, length: 0 } }).catch(() => []),
+    getProgramAccountPubkeys(rpcUrl, l1, DELEGATION_PROGRAM_ID, [discFilter]),
+    getProgramAccountPubkeys(rpcUrl, l1, PROGRAM_ID, [discFilter]),
   ]);
   const fetchEntries = async (keys: PublicKey[]): Promise<TableEntry[]> => {
     const out: TableEntry[] = [];
@@ -180,8 +276,8 @@ async function scanProgramTables(l1: Connection): Promise<{
     return out;
   };
   const [del, und] = await Promise.all([
-    fetchEntries(delKeys.map((a) => a.pubkey)),
-    fetchEntries(undKeys.map((a) => a.pubkey)),
+    fetchEntries(delKeys),
+    fetchEntries(undKeys),
   ]);
   return {
     delegatedAccounts: del,
@@ -193,15 +289,16 @@ async function scanCreatorTables(l1: Connection, creator: PublicKey): Promise<{
   delegatedAccounts: TableEntry[];
   undelegatedAccounts: TableEntry[];
 }> {
+  const rpcUrl = getL1RpcUrl();
   const creatorFilter = { memcmp: { offset: OFF.CREATOR, bytes: creator.toBase58() } };
   const filters = [discFilter, creatorFilter];
   const [del, und] = await Promise.all([
-    l1.getProgramAccounts(DELEGATION_PROGRAM_ID, { filters }).catch(() => []),
-    l1.getProgramAccounts(PROGRAM_ID, { filters }).catch(() => []),
+    getProgramAccountEntries(rpcUrl, l1, DELEGATION_PROGRAM_ID, filters),
+    getProgramAccountEntries(rpcUrl, l1, PROGRAM_ID, filters),
   ]);
   return {
-    delegatedAccounts: del.map((a) => ({ pubkey: a.pubkey, account: { data: Buffer.from(a.account.data), lamports: a.account.lamports, owner: a.account.owner } })),
-    undelegatedAccounts: und.map((a) => ({ pubkey: a.pubkey, account: { data: Buffer.from(a.account.data), lamports: a.account.lamports, owner: a.account.owner } })),
+    delegatedAccounts: del,
+    undelegatedAccounts: und,
   };
 }
 
@@ -513,11 +610,17 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
   try {
     creatorPk = new PublicKey(creatorFilter);
   } catch {
-    return NextResponse.json({ error: 'Invalid creator wallet', tables: [] }, { status: 400 });
+    return NextResponse.json({
+      error: 'Invalid creator wallet',
+      tables: [],
+      serverRpcConfigured: !!getL1Connection(),
+      indexerEnabled: indexerReadsEnabled(),
+    }, { status: 400 });
   }
 
   const l1 = getL1Connection();
-  const raw = indexerReadsEnabled() ? await fetchRawTablesViaIndexer({}) : null;
+  const indexerEnabled = indexerReadsEnabled();
+  const raw = indexerEnabled ? await fetchRawTablesViaIndexer({}) : null;
   let indexerDelegated: TableEntry[] = [];
   let indexerUndelegated: TableEntry[] = [];
   if (raw?.entries.length) {
@@ -553,5 +656,7 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
     delegatedCount: delegatedAccounts.length,
     undelegatedCount: undelegatedAccounts.length,
     teeOverlay,
+    serverRpcConfigured: !!l1,
+    indexerEnabled,
   });
 }

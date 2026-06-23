@@ -97,7 +97,7 @@ export default function MyTablesPage() {
     (async () => {
       try {
         // 1) On-chain discovery: cash tables this wallet created or sits at.
-        const discovered = await discoverMyCashTables(wallet);
+        const discovered = await discoverMyCashTables(wallet, { force: true });
         // Keep only tables this wallet CREATED (discovery also returns seated-at).
         const mine = discovered.filter((t) => t.state.creator.toBase58() === wallet);
         if (mine.length === 0) {

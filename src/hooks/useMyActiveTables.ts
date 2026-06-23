@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
-import { levelAtLeast } from '@/lib/user-config';
+import { hasUserRpc, levelAtLeast } from '@/lib/user-config';
 import { STATIC_EXPORT } from '@/lib/runtime-mode';
 
 export interface MyActiveTable {
@@ -83,7 +83,7 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
       }
       try {
         const { discoverMyCashTables } = await import('@/lib/table-discovery');
-        const cashRows: MyActiveTable[] = (await discoverMyCashTables(walletStr).catch(() => []))
+        const cashRows: MyActiveTable[] = (await discoverMyCashTables(walletStr, { force }).catch(() => []))
           .filter((table) => table.isSeated)
           .map((table) => ({
             tablePda: table.pubkey,
@@ -122,14 +122,17 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
         return;
       }
       const data = await res.json();
-      if (data?.serverRpcConfigured === false) {
-        await publishFallback();
-        return;
-      }
       if (activeWallet !== walletStr) return;
       const tables: MyActiveTable[] = Array.isArray(data?.tables)
         ? data.tables.filter((t: any) => typeof t?.tablePda === 'string')
         : [];
+      if (
+        data?.serverRpcConfigured === false ||
+        (tables.length === 0 && (force || hasUserRpc()))
+      ) {
+        await publishFallback();
+        return;
+      }
       // Monotonic publish: never let an earlier-started response overwrite a
       // fresher one that already landed (the force-vs-background race).
       if (startedAt < lastPublishedAtMs) return;
