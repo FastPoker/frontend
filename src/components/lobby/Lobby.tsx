@@ -78,6 +78,7 @@ interface CashTable {
   pubkey: string;
   phase: number;
   currentPlayers: number;
+  snapshotCurrentPlayers?: number;
   maxPlayers: number;
   smallBlind: number;
   bigBlind: number;
@@ -86,6 +87,7 @@ interface CashTable {
   handNumber: number;
   lastActionSlot?: number;
   isDelegated: boolean;
+  liveStateStale?: boolean;
   isUserCreated: boolean;
   tokenMint: string;
   tokenEscrow?: string;
@@ -153,6 +155,28 @@ async function fetchTableListWithStandaloneFallback(
     serverRpcConfigured: false,
     clientRpcFallback: true,
   };
+}
+
+type TableCountRow = Pick<CashTable, 'gameType' | 'currentPlayers' | 'maxPlayers' | 'isDelegated' | 'phase'> & {
+  snapshotCurrentPlayers?: number;
+};
+
+function effectiveTablePlayers(table: TableCountRow): number {
+  const maxPlayers = Math.max(0, Number(table.maxPlayers ?? 0));
+  const current = Math.max(0, Number(table.currentPlayers ?? 0));
+  if (current > 0) return Math.min(current, maxPlayers || current);
+
+  // Delegated SNG tables are live on the TEE. In standalone/static mode there
+  // may be no authenticated TEE overlay, so currentPlayers is intentionally 0.
+  // Use the frozen L1 snapshot, or maxPlayers as a bounded last-resort count for
+  // non-complete SNG tables so active games are not invisible in the lobby.
+  if (table.gameType !== 3 && table.isDelegated) {
+    const snapshot = Math.max(0, Number(table.snapshotCurrentPlayers ?? 0));
+    if (snapshot > 0) return Math.min(snapshot, maxPlayers || snapshot);
+    if (maxPlayers > 0 && table.phase !== 7) return maxPlayers;
+  }
+
+  return 0;
 }
 
 interface SngPool {
@@ -3570,11 +3594,18 @@ export function Lobby(props: LobbyProps) {
       if (!fullRequestMode) { setSummaryLoaded(true); return; }
       try {
         const data = await fetchTableListWithStandaloneFallback('/api/tables/list?limit=300', { limit: 300 });
-        const tables: Array<{ pubkey?: string; gameType?: number; currentPlayers?: number; maxPlayers?: number; phase?: number; smallBlind?: number; bigBlind?: number; tier?: number; isDelegated?: boolean }> = data.tables || [];
+        const tables: Array<{ pubkey?: string; gameType?: number; currentPlayers?: number; snapshotCurrentPlayers?: number; maxPlayers?: number; phase?: number; smallBlind?: number; bigBlind?: number; tier?: number; isDelegated?: boolean }> = data.tables || [];
         let players = 0, cash = 0, sng = 0, cashActive = 0, sngActive = 0;
         const live: typeof liveSngTables = [];
         for (const t of tables) {
-          const pl = t.currentPlayers ?? 0;
+          const pl = effectiveTablePlayers({
+            gameType: t.gameType ?? 0,
+            currentPlayers: t.currentPlayers ?? 0,
+            snapshotCurrentPlayers: t.snapshotCurrentPlayers,
+            maxPlayers: t.maxPlayers ?? 0,
+            isDelegated: !!t.isDelegated,
+            phase: t.phase ?? 0,
+          });
           players += pl;
           if (t.gameType === 3) { cash++; if (pl > 0) cashActive++; }
           else {
