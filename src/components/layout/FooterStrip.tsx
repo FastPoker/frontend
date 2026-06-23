@@ -134,9 +134,17 @@ export function FooterStrip() {
   const [rpcLabel, setRpcLabel] = useState('free pool');
   const [reqLevel, setReqLevel] = useState<RequestLevel>('mvr');
   useEffect(() => {
-    const envSet = !!(process.env.NEXT_PUBLIC_L1_RPC_URL || '').trim();
+    const envRpc = (process.env.NEXT_PUBLIC_L1_RPC_URL || '').trim();
+    const envSet = !!envRpc;
+    const isServerRpc = envRpc === '/rpc' || envRpc.startsWith('/rpc/');
     setRpcLabel(
-      isPoolForced() ? 'free pool' : hasUserRpc() ? 'your endpoint' : envSet ? 'host default' : 'free pool',
+      isPoolForced()
+        ? 'free pool'
+        : hasUserRpc()
+          ? 'your endpoint'
+          : envSet
+            ? isServerRpc ? 'server RPC' : 'host default'
+            : 'free pool',
     );
     setReqLevel(getRequestLevel());
   }, []);

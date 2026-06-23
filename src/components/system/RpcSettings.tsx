@@ -28,7 +28,8 @@ type ProviderId = 'site' | 'pool' | 'helius' | 'quicknode' | 'custom';
 // their own. NOTE: a keyless operator-proxy URL here is safe; a keyed URL would
 // be inlined into the bundle (don't ship that publicly).
 const SITE_RPC = (process.env.NEXT_PUBLIC_L1_RPC_URL || '').trim();
-const HAS_SITE_RPC = SITE_RPC !== '' && SITE_RPC !== '/rpc' && SITE_RPC.toLowerCase() !== 'pool';
+const SITE_RPC_IS_SERVER = SITE_RPC === '/rpc' || SITE_RPC.startsWith('/rpc/');
+const HAS_SITE_RPC = SITE_RPC !== '' && SITE_RPC.toLowerCase() !== 'pool';
 
 interface Provider {
   id: ProviderId;
@@ -48,8 +49,14 @@ const PROVIDERS: Provider[] = [
   // Shown only when the operator baked in an RPC (env). Selecting it clears any
   // per-browser override so you use the site's endpoint.
   ...(HAS_SITE_RPC ? [{
-    id: 'site' as ProviderId, name: 'Site default RPC', badge: 'DEFAULT', recommended: true, needsUrl: false,
-    blurb: "Use the endpoint this site is configured with by its operator. Recommended on a hosted site — set up for reliability, no key to manage.",
+    id: 'site' as ProviderId,
+    name: SITE_RPC_IS_SERVER ? 'Server RPC' : 'Site default RPC',
+    badge: 'DEFAULT',
+    recommended: true,
+    needsUrl: false,
+    blurb: SITE_RPC_IS_SERVER
+      ? "Use this site's server-side RPC proxy. Recommended for hosted deployments - no browser key for you to manage."
+      : "Use the endpoint this site is configured with by its operator. Recommended on a hosted site - set up for reliability, no key to manage.",
   }] : []),
   {
     id: 'pool', name: 'Free public pool', badge: HAS_SITE_RPC ? 'FREE' : 'DEFAULT', needsUrl: false,
@@ -177,8 +184,8 @@ export function RpcSettings() {
           <div className="w-full max-w-lg rounded-2xl border border-orange/20 bg-[#0d0d10] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 text-lg font-bold tracking-wide text-bone">Choose your RPC</div>
             <p className="mb-4 text-[12px] leading-relaxed text-bone/55">
-              Your endpoint powers reads and transactions. The free pool works out of the box;
-              your own RPC is faster and more reliable, and overrides the host default.
+              Use the server RPC when this site provides one, or enter your own endpoint.
+              Your own RPC overrides the server/default choice in this browser.
             </p>
 
             {/* Request level: how much optional data the app loads/polls */}
