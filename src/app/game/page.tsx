@@ -25,6 +25,7 @@ import { requestOpenSessionRenewModal } from '@/components/layout/SessionRenewMo
 import {
   buildDepositForJoinInstruction,
   buildDelegateDepositProofInstruction,
+  buildDelegateSeatCardsInstruction,
   buildSeatPlayerInstruction,
   buildCleanupDepositProofInstruction,
   buildResizeVaultInstruction,
@@ -35,6 +36,7 @@ import {
   getWhitelistPda,
   getPlayerTableMarkerPda,
   getSeatPda,
+  getSeatCardsPda,
   parseSeatState,
   SeatStatus,
   parseTableState,
@@ -1715,6 +1717,64 @@ function CashGameView() {
     }
   }, [publicKey, signMessage, tablePubkey, cancelPendingSeat]);
 
+  const ensureSeatCardsDelegated = useCallback(async (seatIndex: number): Promise<void> => {
+    if (!publicKey) throw new Error('Wallet not connected.');
+    if (!signTransaction) throw new Error('Your wallet does not support transaction signing (required to prepare seat cards).');
+
+    const conn = makeL1Connection();
+    const teeConn = activeConnection;
+    const tablePda = new PublicKey(tablePubkey);
+    const [seatCardsPda] = getSeatCardsPda(tablePda, seatIndex);
+    const delegationRecordPda = delegationRecordPdaFromDelegatedAccount(seatCardsPda);
+    const [seatCardsInfo, delegationInfo] = await Promise.all([
+      conn.getAccountInfo(seatCardsPda),
+      conn.getAccountInfo(delegationRecordPda),
+    ]);
+
+    const waitForSeatCardsOnTee = async () => {
+      if (teeConn) {
+        for (let poll = 0; poll < 8; poll++) {
+          await new Promise(r => setTimeout(r, 750));
+          const info = await teeConn.getAccountInfo(seatCardsPda).catch(() => null);
+          if (info) return;
+        }
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    };
+
+    if (!seatCardsInfo || seatCardsInfo.owner.equals(DELEGATION_PROGRAM_ID) || delegationInfo) {
+      await waitForSeatCardsOnTee();
+      return;
+    }
+
+    setStatus('Preparing private seat cards...');
+    const delegationBufferPda = delegateBufferPdaFromDelegatedAccountAndOwnerProgram(seatCardsPda, ANCHOR_PROGRAM_ID);
+    const delegationMetadataPda = delegationMetadataPdaFromDelegatedAccount(seatCardsPda);
+    const tx = new Transaction().add(buildDelegateSeatCardsInstruction(
+      publicKey,
+      tablePda,
+      seatIndex,
+      delegationBufferPda,
+      delegationRecordPda,
+      delegationMetadataPda,
+      DELEGATION_PROGRAM_ID,
+    ));
+    tx.feePayer = publicKey;
+    tx.recentBlockhash = (await getLatestBlockhashClient(conn, 'confirmed')).blockhash;
+
+    const sim = await conn.simulateTransaction(tx);
+    if (sim.value.err) {
+      const errJson = JSON.stringify(sim.value.err);
+      const lastLogs = (sim.value.logs || []).slice(-8).join(' | ');
+      throw new Error(`SeatCards delegation simulation failed: ${errJson}${lastLogs ? ` - ${lastLogs}` : ''}`);
+    }
+
+    const signed = await signTransaction(tx);
+    const sig = await conn.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+    await conn.confirmTransaction(sig, 'confirmed');
+    await waitForSeatCardsOnTee();
+  }, [activeConnection, publicKey, signTransaction, tablePubkey]);
+
   // Client-side cash seat: production routed seat_player through a server keypair
   // (browser wallets can't reach the TEE), but the standalone has a player-
   // authenticated TEE connection (activeConnection) + local signing, so we sign
@@ -1731,6 +1791,7 @@ function CashGameView() {
     const tablePda = new PublicKey(tablePubkey);
     const maxPlayers = gameState?.maxPlayers || 6;
     const includeWhitelist = !!gameState?.isPrivate;
+    await ensureSeatCardsDelegated(seatIndex);
     const ix = buildSeatPlayerInstruction(publicKey, tablePda, seatIndex, undefined, publicKey, maxPlayers, includeWhitelist);
     const tx = new Transaction().add(ix);
     tx.feePayer = publicKey;
@@ -1750,7 +1811,7 @@ function CashGameView() {
       if (s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized') break;
     }
     return sig;
-  }, [publicKey, signTransaction, ensurePlayerAuth, activeConnection, tablePubkey, gameState]);
+  }, [publicKey, signTransaction, ensurePlayerAuth, activeConnection, tablePubkey, gameState, ensureSeatCardsDelegated]);
 
   const finishPendingSeat = useCallback(async (seatIndex: number): Promise<boolean> => {
     if (!publicKey || !gameState) return false;
@@ -1842,7 +1903,7 @@ function CashGameView() {
       setJoiningSeat(null);
       setBuyInLoading(false);
     }
-  }, [publicKey, signMessage, tablePubkey, gameState?.maxPlayers, gameState?.blinds.big, buyInMin, buyInMax, tokenMint, reloadSession, refreshState, triggerCashReady]);
+  }, [publicKey, signMessage, tablePubkey, gameState?.maxPlayers, gameState?.blinds.big, buyInMin, buyInMax, tokenMint, reloadSession, refreshState, triggerCashReady, clientSeatPlayer]);
 
   useEffect(() => {
     if (!publicKey || !gameState || gameState.isCashGame === false || gameState.mySeatIndex >= 0) {
