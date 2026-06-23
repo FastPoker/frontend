@@ -120,7 +120,7 @@ function Home() {
   }, [searchParams, router]);
 
   // TEE auth for private card reads
-  const { teeConnection, teeAuthenticated, forceRefresh: forceRefreshTee, authenticatePlayer, ensurePlayerAuth, isPlayerReady } = useGameAuth();
+  const { teeConnection, teeAuthenticated, forceRefresh: forceRefreshTee, authenticatePlayer, ensurePlayerAuth, ensurePlayerConnection, isPlayerReady } = useGameAuth();
 
   // On-chain game state hook - pass session key for gasless play
   const { 
@@ -131,7 +131,7 @@ function Home() {
     isPendingAction,
     error: gameError,
     refreshState: refreshGameState
-  } = useOnChainGame(activeTable, session.sessionKey, teeConnection, teeAuthenticated, forceRefreshTee);
+  } = useOnChainGame(activeTable, session.sessionKey, teeConnection, teeAuthenticated, forceRefreshTee, ensurePlayerConnection);
 
   // Auto-authenticate with TEE as player when an active table is loaded.
   // Open the SessionRenewModal first so the user sees WHY the wallet popup

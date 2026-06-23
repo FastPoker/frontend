@@ -60,6 +60,7 @@ export interface GameAuthState {
   authenticatePlayer: () => Promise<void>;       // Trigger player signMessage auth for default validator
   authenticatePlayerForValidator: (validatorUrl: string) => Promise<boolean>; // Auth for specific validator
   ensurePlayerAuth: () => Promise<boolean>;      // Gate: returns true if player auth active, triggers if not
+  ensurePlayerConnection: (validatorUrl?: string) => Promise<Connection | null>; // Gate + return fresh tokenized TEE connection
   forceRefresh: () => Promise<void>;             // Force re-auth (recovery)
   // For components that need the raw connection
   plainConnection: Connection;
@@ -100,6 +101,11 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
     [],
   );
   const [teeConnection, setTeeConnection] = useState<Connection>(plainConnection);
+  const teeConnectionRef = useRef<Connection>(plainConnection);
+  const setCurrentTeeConnection = useCallback((conn: Connection) => {
+    teeConnectionRef.current = conn;
+    setTeeConnection(conn);
+  }, []);
   // Multi-validator: authority-authed connections per validator URL
   const validatorConnsRef = useRef<Map<string, Connection>>(new Map());
   const [validatorConnections, setValidatorConnections] = useState<Map<string, Connection>>(new Map());
@@ -169,7 +175,7 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
       if (validatorUrl === getDefaultValidator().rpcUrl || validatorUrl === TEE_BASE) {
         setAuthToken(lr.token);
         tokenExpiryRef.current = expiry;
-        setTeeConnection(conn);
+        setCurrentTeeConnection(conn);
         setTokenType('player');
       }
       // Cache player token — use consistent key (pub only for default validator, pub+url for others)
@@ -253,7 +259,9 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
       const conn = new Connection(`${TEE_BASE}?token=${token}`, { commitment: 'confirmed', wsEndpoint: DUMMY_WS });
       setAuthToken(token);
       tokenExpiryRef.current = expiry;
-      setTeeConnection(conn);
+      validatorConnsRef.current.set(TEE_BASE, conn);
+      setValidatorConnections(new Map(validatorConnsRef.current));
+      setCurrentTeeConnection(conn);
       setTokenType('player');
       consecutiveFailuresRef.current = 0;
       console.log('[GameAuth] Restored cached player token (expiry in', Math.round((expiry - Date.now()) / 60000), 'min)');
@@ -294,7 +302,7 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
         // public table reads keep working.
         setAuthToken(null);
         setTokenType('none');
-        setTeeConnection(plainConnection);
+        setCurrentTeeConnection(plainConnection);
         tokenExpiryRef.current = 0;
       }
       // NOTE: no early return — anonymous viewers need the authority token too.
@@ -349,7 +357,9 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
                   // Cache is still valid — restore it
                   setAuthToken(token);
                   tokenExpiryRef.current = expiry;
-                  setTeeConnection(testConn);
+                  validatorConnsRef.current.set(TEE_BASE, testConn);
+                  setValidatorConnections(new Map(validatorConnsRef.current));
+                  setCurrentTeeConnection(testConn);
                   setTokenType('player');
                   console.log('[GameAuth] Restored player token from cache after health failure');
                   scheduleRefresh();
@@ -445,12 +455,47 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [getPlayerToken, scheduleRefresh]);
 
+  // ─── Public: gate check + fresh tokenized connection ───
+  // React state publishes teeConnection on the next render. Action sends often
+  // happen inside the same click handler that just authenticated, so return the
+  // connection from refs updated synchronously by getPlayerTokenForValidator().
+  const ensurePlayerConnection = useCallback(async (validatorUrl = TEE_BASE): Promise<Connection | null> => {
+    const target = validatorUrl || TEE_BASE;
+    const isDefault = target === TEE_BASE || target === getDefaultValidator().rpcUrl;
+    const existing = isDefault ? teeConnectionRef.current : validatorConnsRef.current.get(target);
+    if (existing?.rpcEndpoint.includes('token=') && tokenExpiryRef.current > Date.now()) {
+      return existing;
+    }
+    if (isAuthPendingRef.current) {
+      console.warn('[JOIN-AUTH] ensurePlayerConnection: auth already in progress — returning null');
+      return null;
+    }
+    console.log(`[JOIN-AUTH] ensurePlayerConnection: starting player token fetch for ${target}`);
+    isAuthPendingRef.current = true;
+    setIsAuthenticating(true);
+    try {
+      const ok = await getPlayerTokenForValidator(target);
+      if (!ok) {
+        console.error('[JOIN-AUTH] ensurePlayerConnection: getPlayerTokenForValidator returned false');
+        return null;
+      }
+      scheduleRefresh();
+      return isDefault ? teeConnectionRef.current : (validatorConnsRef.current.get(target) ?? null);
+    } catch (e: any) {
+      console.error('[JOIN-AUTH] ensurePlayerConnection: unexpected error:', e.message);
+      return null;
+    } finally {
+      setIsAuthenticating(false);
+      isAuthPendingRef.current = false;
+    }
+  }, [getPlayerTokenForValidator, scheduleRefresh]);
+
   // ─── Public: force refresh (recovery) ───
   // Attempts to restore player-level auth (tries cached token first, then authority fallback).
   // Does NOT pop up signMessage — that would be disruptive during gameplay.
   const forceRefresh = useCallback(async () => {
     setAuthToken(null);
-    setTeeConnection(plainConnection);
+    setCurrentTeeConnection(plainConnection);
     tokenExpiryRef.current = 0;
     setTokenType('none');
     isAuthPendingRef.current = false;
@@ -495,7 +540,9 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
                 // Cached player token still valid — restore it
                 setAuthToken(token);
                 tokenExpiryRef.current = expiry;
-                setTeeConnection(testConn);
+                validatorConnsRef.current.set(TEE_BASE, testConn);
+                setValidatorConnections(new Map(validatorConnsRef.current));
+                setCurrentTeeConnection(testConn);
                 setTokenType('player');
                 consecutiveFailuresRef.current = 0;
                 cacheRestoreAttemptsRef.current++;
@@ -577,6 +624,7 @@ export function GameAuthProvider({ children }: { children: ReactNode }) {
     authenticatePlayer,
     authenticatePlayerForValidator,
     ensurePlayerAuth,
+    ensurePlayerConnection,
     forceRefresh,
     plainConnection,
   };

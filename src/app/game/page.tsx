@@ -94,7 +94,7 @@ function CashGameView() {
   const tablePubkey = (searchParams.get('table') ?? '') as string;
   const { publicKey, sendTransaction, signTransaction, signMessage, isConnected: connected } = useUnifiedWallet();
   const { session, createSession, reloadSession } = useSessionContext();
-  const { teeConnection, teeAuthenticated, forceRefresh: forceRefreshTee, authenticatePlayer, ensurePlayerAuth, isPlayerReady, isTeeAuthenticating, getConnectionForValidator } = useGameAuth();
+  const { teeConnection, teeAuthenticated, forceRefresh: forceRefreshTee, authenticatePlayer, ensurePlayerAuth, ensurePlayerConnection, isPlayerReady, getConnectionForValidator } = useGameAuth();
 
   // Detect which validator this table is delegated to (from L1 delegation record)
   const [tableValidatorUrl, setTableValidatorUrl] = useState<string | null>(null);
@@ -140,7 +140,7 @@ function CashGameView() {
     claimSeatSession,
     error: gameError,
     refreshState,
-  } = useOnChainGame(tablePubkey, session.sessionKey, activeConnection, teeAuthenticated, forceRefreshTee);
+  } = useOnChainGame(tablePubkey, session.sessionKey, activeConnection, teeAuthenticated, forceRefreshTee, ensurePlayerConnection);
 
   // Voluntary off-chain card show (post-hand only; signed by the session key).
   const showCards = useShowCards(tablePubkey, gameState?.handNumber, session.sessionKey, gameState?.mySeatIndex);
@@ -1717,12 +1717,12 @@ function CashGameView() {
     }
   }, [publicKey, signMessage, tablePubkey, cancelPendingSeat]);
 
-  const ensureSeatCardsDelegated = useCallback(async (seatIndex: number): Promise<void> => {
+  const ensureSeatCardsDelegated = useCallback(async (seatIndex: number, teeConnOverride?: Connection | null): Promise<void> => {
     if (!publicKey) throw new Error('Wallet not connected.');
     if (!signTransaction) throw new Error('Your wallet does not support transaction signing (required to prepare seat cards).');
 
     const conn = makeL1Connection();
-    const teeConn = activeConnection;
+    const teeConn = teeConnOverride || activeConnection;
     const tablePda = new PublicKey(tablePubkey);
     const [seatCardsPda] = getSeatCardsPda(tablePda, seatIndex);
     const delegationRecordPda = delegationRecordPdaFromDelegatedAccount(seatCardsPda);
@@ -1784,22 +1784,16 @@ function CashGameView() {
   const clientSeatPlayer = useCallback(async (seatIndex: number): Promise<string> => {
     if (!publicKey) throw new Error('Wallet not connected.');
     if (!signTransaction) throw new Error('Your wallet does not support transaction signing (required to seat at the table).');
-    const authOk = await ensurePlayerAuth();
-    if (!authOk) throw new Error('Table authentication required — please sign to continue.');
-    const teeConn = activeConnection;
+    const teeConn = await ensurePlayerConnection();
     if (!teeConn) throw new Error('TEE connection unavailable.');
     const tablePda = new PublicKey(tablePubkey);
     const maxPlayers = gameState?.maxPlayers || 6;
     const includeWhitelist = !!gameState?.isPrivate;
-    await ensureSeatCardsDelegated(seatIndex);
+    await ensureSeatCardsDelegated(seatIndex, teeConn);
     const ix = buildSeatPlayerInstruction(publicKey, tablePda, seatIndex, undefined, publicKey, maxPlayers, includeWhitelist);
     const tx = new Transaction().add(ix);
     tx.feePayer = publicKey;
-    try {
-      tx.recentBlockhash = (await teeConn.getLatestBlockhash('confirmed')).blockhash;
-    } catch {
-      tx.recentBlockhash = (await getLatestBlockhashClient(makeL1Connection(), 'confirmed')).blockhash;
-    }
+    tx.recentBlockhash = (await teeConn.getLatestBlockhash('confirmed')).blockhash;
     const signed = await signTransaction(tx);
     const sig = await teeConn.sendRawTransaction(signed.serialize(), { skipPreflight: true });
     // Poll the TEE for the seat to land (state poll catches up regardless).
@@ -1811,7 +1805,7 @@ function CashGameView() {
       if (s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized') break;
     }
     return sig;
-  }, [publicKey, signTransaction, ensurePlayerAuth, activeConnection, tablePubkey, gameState, ensureSeatCardsDelegated]);
+  }, [publicKey, signTransaction, ensurePlayerConnection, tablePubkey, gameState, ensureSeatCardsDelegated]);
 
   const finishPendingSeat = useCallback(async (seatIndex: number): Promise<boolean> => {
     if (!publicKey || !gameState) return false;
@@ -3427,7 +3421,7 @@ function CashGameView() {
               pastHands={pastHands}
               viewingPastHand={viewingPastHand}
               onHandNav={setViewingPastHand}
-              actionPending={actionPending || isClaimingSession || isTeeAuthenticating}
+              actionPending={actionPending || isClaimingSession}
               showdownPot={showdownPot}
               showdownPayouts={showdownPayouts}
               maxPlayers={gameState.maxPlayers}

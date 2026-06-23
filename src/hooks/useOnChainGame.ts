@@ -46,6 +46,17 @@ const OWN_CARD_PHASES = new Set([
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const perfNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 const shouldDisplayOwnCards = (phase?: string) => !!phase && OWN_CARD_PHASES.has(phase);
 const SEAT_CARDS_TABLE_OFFSET = 8;
 const SEAT_CARDS_SEAT_OFFSET = 40;
@@ -366,7 +377,14 @@ interface UseOnChainGameReturn {
   wsActive: boolean;
 }
 
-export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypair | null, teeConnection?: Connection | null, teeAuthenticated?: boolean, onAuthFailed?: () => void): UseOnChainGameReturn {
+export function useOnChainGame(
+  tablePdaString: string | null,
+  sessionKey?: Keypair | null,
+  teeConnection?: Connection | null,
+  teeAuthenticated?: boolean,
+  onAuthFailed?: () => void,
+  ensurePlayerConnection?: () => Promise<Connection | null>,
+): UseOnChainGameReturn {
   const { publicKey, sendTransaction, signTransaction } = useUnifiedWallet();
   const [gameState, setGameState] = useState<OnChainGameState | null>(null);
   const [isLoading, setIsLoading] = useState(!!tablePdaString);
@@ -2063,8 +2081,7 @@ export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypa
       return null;
     }
 
-    const l1Connection = connectionRef.current;
-    const teeConn = teeConnRef.current;
+    let teeConn = teeConnRef.current;
     const tablePda = new PublicKey(gameState.tablePda);
 
     // Map action string to enum
@@ -2097,6 +2114,19 @@ export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypa
     try {
       // Non-gameplay actions can fall back to wallet signing if session is unavailable
       const isNonGameplayAction = action === 'sit_out' || action === 'return_to_play' || action === 'leave_cash_game' || action === 'use_time_bank';
+
+      // Gameplay actions must use the player-token TEE connection. Do not let
+      // the request-level / free public L1 RPC choice affect action routing.
+      if (!isNonGameplayAction) {
+        const freshConn = await ensurePlayerConnection?.();
+        if (freshConn) {
+          teeConn = freshConn;
+          teeConnRef.current = freshConn;
+        }
+        if (!teeConn || (!teeAuthenticated && !teeConn.rpcEndpoint.includes('token='))) {
+          throw new Error('Table authentication required — sign the session prompt and try again.');
+        }
+      }
 
       // Use session key for gasless play on ER if available
       console.log('sendAction: sessionKey exists?', !!sessionKey, 'action:', action);
@@ -2159,22 +2189,45 @@ export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypa
         tx.add(instruction);
         try {
           tx.feePayer = sessionKey.publicKey;
-          // TEE requires its own blockhash — L1 blockhash causes "Blockhash not found"
+          // TEE requires its own blockhash. Never fall back to L1 here: the free
+          // public L1 pool can produce a valid Solana blockhash that the TEE will
+          // not accept/confirm, leaving the UI stuck at CONFIRMING TX.
           try {
-            tx.recentBlockhash = (await teeConn.getLatestBlockhash()).blockhash;
-          } catch {
-            tx.recentBlockhash = (await l1Connection.getLatestBlockhash()).blockhash;
+            tx.recentBlockhash = (await withTimeout(teeConn.getLatestBlockhash('confirmed'), 5000, 'TEE blockhash')).blockhash;
+          } catch (bhErr: any) {
+            throw new Error(`TEE blockhash unavailable. Check the TEE connection and try again. ${bhErr?.message?.slice(0, 120) || ''}`.trim());
           }
           tx.sign(sessionKey);
           // TEE WS subscriptions work, but sendAndConfirmTransaction is not used here — polling via getSignatureStatuses is simpler. Migration pending.
-          signature = await teeConn.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+          signature = await withTimeout(
+            teeConn.sendRawTransaction(tx.serialize(), { skipPreflight: true }),
+            8000,
+            'TEE action send',
+          );
           // Poll for confirmation via getSignatureStatuses
-          for (let p = 0; p < 10; p++) {
-            await new Promise(r => setTimeout(r, 1000));
-            const statuses = await teeConn.getSignatureStatuses([signature]);
+          let confirmed = false;
+          let lastStatusError: string | null = null;
+          for (let p = 0; p < 20; p++) {
+            await new Promise(r => setTimeout(r, 500));
+            const statuses = await withTimeout(
+              teeConn.getSignatureStatuses([signature]),
+              2500,
+              'TEE action status',
+            ).catch((statusErr: any) => {
+              lastStatusError = statusErr?.message || 'status unavailable';
+              return null;
+            });
             const status = statuses?.value?.[0];
             if (status?.err) throw new Error('session action TX err: ' + JSON.stringify(status.err));
-            if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') break;
+            if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') {
+              confirmed = true;
+              break;
+            }
+          }
+          if (!confirmed) {
+            throw new Error(lastStatusError
+              ? `Action transaction was not confirmed on the TEE (${lastStatusError}). Try again.`
+              : 'Action transaction was not confirmed on the TEE. Try again.');
           }
           console.log(`Action ${action} confirmed (gasless on TEE):`, signature);
         } catch (sessionErr: any) {
@@ -2239,11 +2292,11 @@ export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypa
 
         const tx = new Transaction().add(ix);
         tx.feePayer = publicKey;
-        // TEE requires its own blockhash — L1 blockhash causes "Blockhash not found"
+        // TEE requires its own blockhash. Do not use an L1 public-pool fallback.
         try {
-          tx.recentBlockhash = (await teeConn.getLatestBlockhash()).blockhash;
-        } catch {
-          tx.recentBlockhash = (await l1Connection.getLatestBlockhash()).blockhash;
+          tx.recentBlockhash = (await withTimeout(teeConn.getLatestBlockhash('confirmed'), 5000, 'TEE blockhash')).blockhash;
+        } catch (bhErr: any) {
+          throw new Error(`TEE blockhash unavailable. Check the TEE connection and try again. ${bhErr?.message?.slice(0, 120) || ''}`.trim());
         }
         // skipPreflight: wallet adapter simulates against L1 where table is delegation-owned → fails
         signature = await sendTransaction(tx, teeConn, { skipPreflight: true });
@@ -2261,7 +2314,7 @@ export function useOnChainGame(tablePdaString: string | null, sessionKey?: Keypa
     } finally {
       setIsPendingAction(false);
     }
-  }, [publicKey, sendTransaction, gameState, refreshState, sessionKey, readSeatApprovedSigner]);
+  }, [publicKey, sendTransaction, gameState, refreshState, sessionKey, readSeatApprovedSigner, teeAuthenticated, ensurePlayerConnection]);
 
   // Tier 3 E2E hook: mirror gameState onto window.__GAMESTATE__ so Playwright
   // specs can wait on protocol state instead of fragile DOM polling. No-op
