@@ -3421,7 +3421,7 @@ function CashGameView() {
               pastHands={pastHands}
               viewingPastHand={viewingPastHand}
               onHandNav={setViewingPastHand}
-              actionPending={actionPending || isClaimingSession}
+              actionPending={actionPending}
               showdownPot={showdownPot}
               showdownPayouts={showdownPayouts}
               maxPlayers={gameState.maxPlayers}

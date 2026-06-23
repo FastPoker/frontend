@@ -2260,7 +2260,13 @@ export function useOnChainGame(
         }
 
         if (signature) {
-          await refreshState();
+          // Do not block turn controls on a post-action full refresh. The action
+          // already confirmed on TEE; a full refresh may perform L1 disambiguation
+          // reads, and the free public L1 pool can stall there. WS/polling will
+          // catch up; this background refresh is only a convenience.
+          void refreshState().catch((refreshErr: any) => {
+            console.warn('post-action refresh skipped:', refreshErr?.message?.slice(0, 120) || refreshErr);
+          });
           return signature;
         }
       }
@@ -2301,7 +2307,9 @@ export function useOnChainGame(
         // skipPreflight: wallet adapter simulates against L1 where table is delegation-owned → fails
         signature = await sendTransaction(tx, teeConn, { skipPreflight: true });
         console.log(`Action ${action} confirmed (wallet-signed on TEE):`, signature);
-        await refreshState();
+        void refreshState().catch((refreshErr: any) => {
+          console.warn('post-action refresh skipped:', refreshErr?.message?.slice(0, 120) || refreshErr);
+        });
         return signature;
       }
 
