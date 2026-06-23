@@ -196,7 +196,12 @@ export function useOnChainYield(totalStaked: number): OnChainYield {
           return v;
         })
         .catch((err) => {
-          console.error('useOnChainYield: load failed', err);
+          const message = String(err?.message || err || '');
+          if (message.includes('413') || message.toLowerCase().includes('too many requests')) {
+            console.warn('useOnChainYield: RPC throttled; showing degraded yield stats');
+          } else {
+            console.error('useOnChainYield: load failed', err);
+          }
           return { ...INITIAL, loading: false, degraded: true };
         })
         .finally(() => {

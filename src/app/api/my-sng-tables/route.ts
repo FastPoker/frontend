@@ -95,16 +95,13 @@ export async function GET(request: Request) {
     if (!force) {
       const entry = cache.get(wallet);
       if (entry && Date.now() - entry.ts < 30_000) {
-        return NextResponse.json({ tables: entry.tables, cached: true });
+        return NextResponse.json({ tables: entry.tables, cached: true, serverRpcConfigured: true });
       }
     }
 
     const rpc = getRpcAndConnection();
     if (!rpc) {
-      return NextResponse.json(
-        { error: 'server RPC not configured', tables: [] },
-        { status: 503 },
-      );
+      return NextResponse.json({ tables: [], serverRpcConfigured: false });
     }
 
     const walletPk = new PublicKey(wallet);
@@ -131,7 +128,7 @@ export async function GET(request: Request) {
 
     if (seatEntries.length === 0) {
       cache.set(wallet, { tables: [], ts: Date.now() });
-      return NextResponse.json({ tables: [] });
+      return NextResponse.json({ tables: [], serverRpcConfigured: true });
     }
 
     const uniqueTablePdas = Array.from(new Set(seatEntries.map((entry) => entry.tablePda)));
@@ -193,7 +190,7 @@ export async function GET(request: Request) {
     }
 
     cache.set(wallet, { tables, ts: Date.now() });
-    return NextResponse.json({ tables });
+    return NextResponse.json({ tables, serverRpcConfigured: true });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'active table lookup failed', tables: [] }, { status: 500 });
   }

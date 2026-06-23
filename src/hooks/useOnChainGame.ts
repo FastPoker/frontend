@@ -5,6 +5,7 @@ import { makeL1Connection, L1_RPC, TEE_RPC_URL, IS_MAINNET, PLAYER_ACCOUNT_OFFSE
 import { isFpDebugEnabled } from '@/lib/fp-debug';
 import { getErrorMessage } from '@/lib/error-messages';
 import { publishGameState } from '@/lib/dev-state-hook';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 import {
   TableState,
   SeatState,
@@ -193,6 +194,7 @@ function getPhaseDelay(phase: string, wsActive: boolean = false): number {
 // the caller falls back to a direct read — the stale-shadow guard stays on the
 // direct path. 2s timeout so a hung indexer can't stall the poll (mobile lifeline).
 async function fetchTableOwnerViaIndexer(pubkey: string): Promise<{ owner: PublicKey } | null> {
+  if (STATIC_EXPORT) return null;
   try {
     const res = await fetch(`/api/table-account?pubkey=${encodeURIComponent(pubkey)}`, {
       cache: 'no-store',

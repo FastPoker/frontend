@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keypair } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import { buildShowCardsMessage } from '@/lib/show-cards-msg';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 
 export interface ShownCardEntry {
   cards: [number, number];
@@ -44,6 +45,7 @@ export function useShowCards(
   // Poll the relay for shows on the current hand. Only runs once a hand exists;
   // light cadence (3s) since shows are a rare, post-hand event.
   useEffect(() => {
+    if (STATIC_EXPORT) return;
     if (!tablePda || handNumber == null || handNumber < 0) return;
     let cancelled = false;
     const poll = async () => {
@@ -79,6 +81,7 @@ export function useShowCards(
   const reveal = useCallback(async (cards: [number, number]): Promise<boolean> => {
     if (!sessionKey || !tablePda || handNumber == null || mySeatIndex == null || mySeatIndex < 0) return false;
     if (cards[0] === cards[1] || cards.some(c => c < 0 || c > 51)) return false;
+    if (STATIC_EXPORT) return false;
     try {
       const issued = new Date().toISOString();
       const signer = sessionKey.publicKey.toBase58();

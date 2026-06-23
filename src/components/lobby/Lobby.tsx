@@ -34,6 +34,7 @@ import { SngJackpotRail } from '@/components/jackpot/SngJackpotRail';
 import { RAW_YIELD_NAME, LUCKY_JACKPOT_NAME, ROYAL_JACKPOT_NAME } from '@/lib/jackpot-format';
 import { buildWalletApiAuth } from '@/lib/wallet-api-auth';
 import { createTransferCheckedInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 import CashLobbyHeader, {
   type CashFilterState,
   type CashFormat,
@@ -100,6 +101,57 @@ interface CashTable {
     remainingMs: number;
     boosterCount: number;
     rank: number | null;
+  };
+}
+
+type TableListResponse = {
+  tables: CashTable[];
+  loading?: boolean;
+  nextCursor?: string | null;
+  serverRpcConfigured?: boolean;
+  indexerEnabled?: boolean;
+  clientRpcFallback?: boolean;
+};
+
+async function fetchTableListWithStandaloneFallback(
+  url: string,
+  fallback: { creator?: string; gameType?: number; limit?: number },
+): Promise<TableListResponse> {
+  if (STATIC_EXPORT) {
+    const { discoverLobbyTables } = await import('@/lib/table-discovery');
+    const tables = await discoverLobbyTables(fallback).catch(() => []);
+    return {
+      tables: tables as CashTable[],
+      loading: false,
+      nextCursor: null,
+      serverRpcConfigured: false,
+      clientRpcFallback: true,
+    };
+  }
+
+  try {
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      const tables = Array.isArray(data?.tables)
+        ? data.tables.filter((table: any): table is CashTable => typeof table?.pubkey === 'string')
+        : [];
+      if (data?.serverRpcConfigured !== false || data?.indexerEnabled === true) {
+        return { ...data, tables };
+      }
+    }
+  } catch {
+    // Fall through to browser-RPC discovery below.
+  }
+
+  const { discoverLobbyTables } = await import('@/lib/table-discovery');
+  const tables = await discoverLobbyTables(fallback).catch(() => []);
+  return {
+    tables: tables as CashTable[],
+    loading: false,
+    nextCursor: null,
+    serverRpcConfigured: false,
+    clientRpcFallback: true,
   };
 }
 
@@ -3517,9 +3569,7 @@ export function Lobby(props: LobbyProps) {
     const load = async () => {
       if (!fullRequestMode) { setSummaryLoaded(true); return; }
       try {
-        const r = await fetch('/api/tables/list?limit=300');
-        if (!r.ok) return;
-        const data = await r.json();
+        const data = await fetchTableListWithStandaloneFallback('/api/tables/list?limit=300', { limit: 300 });
         const tables: Array<{ pubkey?: string; gameType?: number; currentPlayers?: number; maxPlayers?: number; phase?: number; smallBlind?: number; bigBlind?: number; tier?: number; isDelegated?: boolean }> = data.tables || [];
         let players = 0, cash = 0, sng = 0, cashActive = 0, sngActive = 0;
         const live: typeof liveSngTables = [];
@@ -3675,8 +3725,10 @@ export function Lobby(props: LobbyProps) {
       }
       setCreatorLoading(true);
       try {
-        const res = await fetch(`/api/tables/list?creator=${publicKey.toBase58()}&gameType=3`);
-        const data = await res.json();
+        const data = await fetchTableListWithStandaloneFallback(
+          `/api/tables/list?creator=${publicKey.toBase58()}&gameType=3`,
+          { creator: publicKey.toBase58(), gameType: 3 },
+        );
         const creatorAccounts = data.tables || [];
         if (cancelled) return;
         const tables: CreatorTable[] = creatorAccounts.map((t: CashTable) => {
@@ -3729,8 +3781,7 @@ export function Lobby(props: LobbyProps) {
 
     const doFetch = async (): Promise<{ loading?: boolean; tables?: unknown[] } | null> => {
       try {
-        const r = await fetch('/api/tables/list?gameType=3&limit=60');
-        const data = await r.json();
+        const data = await fetchTableListWithStandaloneFallback('/api/tables/list?gameType=3&limit=60', { gameType: 3, limit: 60 });
         if (cancelled) return data;
         setCashTables(data.tables || []);
         setCashNextCursor(data.nextCursor || null);

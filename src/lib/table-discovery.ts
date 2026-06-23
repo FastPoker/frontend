@@ -13,15 +13,17 @@
  * Shared by CashStandalone and the Lobby creator-tables effect (previously each
  * had its own copy of this logic).
  */
-import { PublicKey, type Connection } from '@solana/web3.js';
-import { makeL1Connection, ANCHOR_PROGRAM_ID } from './constants';
-import { parseTableState, OnChainGameType, getMultipleAccountsInfoChunked, type TableState } from './onchain-game';
+import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
+import { makeL1Connection, ANCHOR_PROGRAM_ID, USDC_DEVNET_MINT, USDC_MAINNET_MINT } from './constants';
+import { ACCOUNT_DISC } from './discriminators';
+import { parseTableState, OnChainGameType, getMultipleAccountsInfoChunked, TABLE_OFFSETS, type TableState } from './onchain-game';
 
 const DELEGATION_PROGRAM_ID = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
 const SEAT_WALLET_OFFSET = 8;
 const SEAT_TABLE_OFFSET = 72;
 const TABLE_CREATOR_OFFSET = 290;
 const TABLE_ALLOC_SIZE = 478;
+const TABLE_DISC = ACCOUNT_DISC.Table;
 
 export interface DiscoveredTable {
   pubkey: string;
@@ -30,9 +32,51 @@ export interface DiscoveredTable {
   isDelegated: boolean;
 }
 
+export interface LobbyDiscoveredTable {
+  pubkey: string;
+  phase: number;
+  currentPlayers: number;
+  snapshotCurrentPlayers: number;
+  maxPlayers: number;
+  smallBlind: number;
+  bigBlind: number;
+  gameType: number;
+  tier: number;
+  pot: number;
+  snapshotPot: number;
+  handNumber: number;
+  lastActionSlot: number;
+  isDelegated: boolean;
+  authority: string;
+  creator: string;
+  tokenEscrow: string;
+  isUserCreated: boolean;
+  rakeAccumulated: number;
+  creatorRakeTotal: number;
+  tokenMint: string;
+  buyInType: number;
+  rakeCap: number;
+  isPrivate: boolean;
+  location: 'L1' | 'TEE';
+  liveStateSource: 'l1' | 'tee-pending';
+  liveStateStale: boolean;
+  decimals: number;
+}
+
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { at: number; tables: DiscoveredTable[] }>();
 const inflight = new Map<string, Promise<DiscoveredTable[]>>();
+const LOBBY_CACHE_TTL_MS = 30_000;
+const lobbyCache = new Map<string, { at: number; tables: LobbyDiscoveredTable[] }>();
+const lobbyInflight = new Map<string, Promise<LobbyDiscoveredTable[]>>();
+
+const tableDiscFilter = {
+  memcmp: {
+    offset: 0,
+    bytes: Buffer.from(TABLE_DISC).toString('base64'),
+    encoding: 'base64' as const,
+  },
+};
 
 async function gpaPubkeys(conn: Connection, program: PublicKey, filters: any[]): Promise<string[]> {
   try {
@@ -41,6 +85,138 @@ async function gpaPubkeys(conn: Connection, program: PublicKey, filters: any[]):
   } catch {
     return []; // free pool blocks gPA
   }
+}
+
+function isCurrentProgramTablePda(pubkey: PublicKey, data: Buffer): boolean {
+  if (data.length < TABLE_OFFSETS.TABLE_ID + 32 || Buffer.compare(data.subarray(0, 8), TABLE_DISC) !== 0) {
+    return false;
+  }
+  try {
+    const tableIdBytes = data.subarray(TABLE_OFFSETS.TABLE_ID, TABLE_OFFSETS.TABLE_ID + 32);
+    const [expectedPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('table'), tableIdBytes],
+      ANCHOR_PROGRAM_ID,
+    );
+    return expectedPda.equals(pubkey);
+  } catch {
+    return false;
+  }
+}
+
+async function gpaTablePubkeys(conn: Connection, program: PublicKey): Promise<PublicKey[]> {
+  try {
+    const accounts = await conn.getProgramAccounts(program, {
+      filters: [tableDiscFilter],
+      dataSlice: { offset: 0, length: 0 },
+    });
+    return accounts.map((account) => account.pubkey);
+  } catch {
+    return [];
+  }
+}
+
+async function getMultipleAccountsInfoSmall(
+  conn: Connection,
+  keys: PublicKey[],
+): Promise<Array<AccountInfo<Buffer> | null>> {
+  const out: Array<AccountInfo<Buffer> | null> = [];
+  const chunkSize = 25;
+  for (let i = 0; i < keys.length; i += chunkSize) {
+    const infos = await conn.getMultipleAccountsInfo(keys.slice(i, i + chunkSize), 'confirmed');
+    for (const info of infos) out.push(info as AccountInfo<Buffer> | null);
+  }
+  return out;
+}
+
+function defaultDecimalsForMint(mint: string): number {
+  return mint === USDC_MAINNET_MINT.toBase58() || mint === USDC_DEVNET_MINT.toBase58() ? 6 : 9;
+}
+
+function readU64(data: Buffer, offset: number): number {
+  return data.length >= offset + 8 ? Number(data.readBigUInt64LE(offset)) : 0;
+}
+
+function readPubkey(data: Buffer, offset: number): string {
+  return data.length >= offset + 32 ? new PublicKey(data.subarray(offset, offset + 32)).toBase58() : '';
+}
+
+function parseLobbyTable(pubkey: PublicKey, info: AccountInfo<Buffer>): LobbyDiscoveredTable | null {
+  const data = Buffer.from(info.data);
+  if (!isCurrentProgramTablePda(pubkey, data)) return null;
+  const state = parseTableState(data);
+  if (!state) return null;
+
+  const isDelegated = info.owner.equals(DELEGATION_PROGRAM_ID);
+  const tokenMint = state.tokenMint || PublicKey.default.toBase58();
+  return {
+    pubkey: pubkey.toBase58(),
+    phase: state.phase,
+    currentPlayers: isDelegated ? 0 : state.currentPlayers,
+    snapshotCurrentPlayers: state.currentPlayers,
+    maxPlayers: state.maxPlayers,
+    smallBlind: state.smallBlind,
+    bigBlind: state.bigBlind,
+    gameType: state.gameType,
+    tier: state.tier,
+    pot: isDelegated ? 0 : state.pot,
+    snapshotPot: state.pot,
+    handNumber: state.handNumber,
+    lastActionSlot: state.lastActionTime,
+    isDelegated,
+    authority: state.authority.toBase58(),
+    creator: state.creator.toBase58(),
+    tokenEscrow: readPubkey(data, TABLE_OFFSETS.TOKEN_ESCROW),
+    isUserCreated: data.length > TABLE_OFFSETS.IS_USER_CREATED ? data[TABLE_OFFSETS.IS_USER_CREATED] === 1 : false,
+    rakeAccumulated: readU64(data, TABLE_OFFSETS.RAKE_ACCUMULATED),
+    creatorRakeTotal: readU64(data, TABLE_OFFSETS.CREATOR_RAKE_TOTAL),
+    tokenMint,
+    buyInType: data.length > TABLE_OFFSETS.BUY_IN_TYPE ? data[TABLE_OFFSETS.BUY_IN_TYPE] : 0,
+    rakeCap: readU64(data, TABLE_OFFSETS.RAKE_CAP),
+    isPrivate: state.isPrivate,
+    location: isDelegated ? 'TEE' : 'L1',
+    liveStateSource: isDelegated ? 'tee-pending' : 'l1',
+    liveStateStale: isDelegated,
+    decimals: defaultDecimalsForMint(tokenMint),
+  };
+}
+
+function rankLobbyTables(tables: LobbyDiscoveredTable[]): LobbyDiscoveredTable[] {
+  return [...tables].sort((a, b) => {
+    const active = Number((b.currentPlayers ?? 0) > 0) - Number((a.currentPlayers ?? 0) > 0);
+    if (active) return active;
+    const fillA = a.maxPlayers > 0 ? a.currentPlayers / a.maxPlayers : 0;
+    const fillB = b.maxPlayers > 0 ? b.currentPlayers / b.maxPlayers : 0;
+    if (fillA !== fillB) return fillB - fillA;
+    if ((a.pot ?? 0) !== (b.pot ?? 0)) return (b.pot ?? 0) - (a.pot ?? 0);
+    return a.pubkey.localeCompare(b.pubkey);
+  });
+}
+
+async function runLobbyScan(opts: { creator?: string; gameType?: number; limit?: number }): Promise<LobbyDiscoveredTable[]> {
+  const conn = makeL1Connection();
+  const pubkeys = new Map<string, PublicKey>();
+  const [delegatedPubkeys, undelegatedPubkeys] = await Promise.all([
+    gpaTablePubkeys(conn, DELEGATION_PROGRAM_ID),
+    gpaTablePubkeys(conn, ANCHOR_PROGRAM_ID),
+  ]);
+  for (const key of [...delegatedPubkeys, ...undelegatedPubkeys]) pubkeys.set(key.toBase58(), key);
+  const keys = Array.from(pubkeys.values());
+  if (keys.length === 0) return [];
+
+  const infos = await getMultipleAccountsInfoSmall(conn, keys);
+  const tables: LobbyDiscoveredTable[] = [];
+  for (let i = 0; i < keys.length; i += 1) {
+    const info = infos[i];
+    if (!info) continue;
+    if (!info.owner.equals(DELEGATION_PROGRAM_ID) && !info.owner.equals(ANCHOR_PROGRAM_ID)) continue;
+    const parsed = parseLobbyTable(keys[i], info);
+    if (!parsed) continue;
+    if (opts.creator && parsed.creator !== opts.creator) continue;
+    if (opts.gameType !== undefined && parsed.gameType !== opts.gameType) continue;
+    tables.push(parsed);
+  }
+  const ranked = rankLobbyTables(tables);
+  return opts.limit ? ranked.slice(0, opts.limit) : ranked;
 }
 
 async function run(wallet: string): Promise<DiscoveredTable[]> {
@@ -112,4 +288,33 @@ export async function discoverMyCashTables(
 export function invalidateMyCashTables(wallet?: string): void {
   if (wallet) cache.delete(wallet);
   else cache.clear();
+}
+
+/**
+ * Lobby-wide table registry for standalone FULL mode when `/api/tables/list`
+ * cannot scan because the operator did not configure a server RPC. It uses the
+ * player/browser RPC selected in Settings, keeps the gPA payload small by first
+ * fetching pubkeys only, then reads table accounts in small batches.
+ */
+export async function discoverLobbyTables(
+  opts: { creator?: string; gameType?: number; limit?: number; force?: boolean } = {},
+): Promise<LobbyDiscoveredTable[]> {
+  const key = JSON.stringify({ creator: opts.creator || '', gameType: opts.gameType ?? null, limit: opts.limit ?? 0 });
+  if (!opts.force) {
+    const hit = lobbyCache.get(key);
+    if (hit && Date.now() - hit.at < LOBBY_CACHE_TTL_MS) return hit.tables;
+    const pending = lobbyInflight.get(key);
+    if (pending) return pending;
+  }
+  const p = runLobbyScan(opts)
+    .catch(() => [])
+    .then((tables) => {
+      lobbyCache.set(key, { at: Date.now(), tables });
+      return tables;
+    })
+    .finally(() => {
+      lobbyInflight.delete(key);
+    });
+  lobbyInflight.set(key, p);
+  return p;
 }

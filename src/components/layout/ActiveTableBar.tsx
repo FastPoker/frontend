@@ -15,6 +15,7 @@ import { getLatestBlockhashClient } from '@/lib/blockhash-client';
 import { confirmFundsAction } from '@/lib/funds-confirmation';
 import { useToast } from '@/components/toast/ToastProvider';
 import { levelAtLeast } from '@/lib/user-config';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 
 function sngTypeShort(name: SngPool['gameTypeName']): string {
   return name === 'heads_up' ? 'HU' : name === '6max' ? '6-Max' : '9-Max';
@@ -341,11 +342,22 @@ export function ActiveTableBar() {
     const poll = async () => {
       if (!levelAtLeast('full')) { setUnfinished((prev) => (prev.length ? [] : prev)); return; }
       try {
-        const res = await fetch(`/api/tables/list?creator=${wallet}&gameType=3`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
+        let rows: any[] = [];
+        if (STATIC_EXPORT) {
+          const { discoverLobbyTables } = await import('@/lib/table-discovery');
+          rows = await discoverLobbyTables({ creator: wallet, gameType: 3 });
+        } else {
+          const res = await fetch(`/api/tables/list?creator=${wallet}&gameType=3`, { cache: 'no-store' });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data?.serverRpcConfigured === false) {
+            const { discoverLobbyTables } = await import('@/lib/table-discovery');
+            rows = await discoverLobbyTables({ creator: wallet, gameType: 3 });
+          } else {
+            rows = Array.isArray(data.tables) ? data.tables : [];
+          }
+        }
         if (cancelled) return;
-        const rows = Array.isArray(data.tables) ? data.tables : [];
         const next: UnfinishedTableCreation[] = rows
           .filter((t: any) => !t.isDelegated && (t.currentPlayers ?? 0) === 0)
           .map((t: any) => ({

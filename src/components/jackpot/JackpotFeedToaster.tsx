@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { JackpotReceipt } from '@/lib/jpv1';
 import { subscribeIndexerTopic, isIndexerWsEnabled } from '@/hooks/useIndexerTopic';
 import { formatJackpotAmount, getKindLabel, getKindColor } from '@/lib/jackpot-format';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 
 /**
  * Global jackpot toaster — primes from `/api/jackpots/recent` for the cold
@@ -51,6 +52,7 @@ export function JackpotFeedToaster() {
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let wsLastSeen: number | null = null;
     let wsUnsubscribe: (() => void) | null = null;
+    const canUseRecentApi = !STATIC_EXPORT;
 
     const recordReceipt = (r: JackpotReceipt) => {
       const id = `${r.txSig}:${r.handNumber}`;
@@ -65,6 +67,7 @@ export function JackpotFeedToaster() {
     };
 
     const startPolling = () => {
+      if (!canUseRecentApi) return;
       if (pollTimer) return;
       const tick = async () => {
         if (cancelled) return;
@@ -103,22 +106,26 @@ export function JackpotFeedToaster() {
       }
     };
 
-    // Cold prime: fetch the existing recent feed once so historical hits
-    // don't fire toasts, even before the WS attaches.
-    (async () => {
-      try {
-        const r = await fetch(`/api/jackpots/recent?limit=50`, { cache: 'no-store' });
-        if (!r.ok) return;
-        const body = (await r.json()) as { receipts: JackpotReceipt[] };
-        if (cancelled) return;
-        for (const rec of body.receipts || []) {
-          seenSigsRef.current.add(`${rec.txSig}:${rec.handNumber}`);
+    if (canUseRecentApi) {
+      // Cold prime: fetch the existing recent feed once so historical hits
+      // don't fire toasts, even before the WS attaches.
+      (async () => {
+        try {
+          const r = await fetch(`/api/jackpots/recent?limit=50`, { cache: 'no-store' });
+          if (!r.ok) return;
+          const body = (await r.json()) as { receipts: JackpotReceipt[] };
+          if (cancelled) return;
+          for (const rec of body.receipts || []) {
+            seenSigsRef.current.add(`${rec.txSig}:${rec.handNumber}`);
+          }
+          primedRef.current = true;
+        } catch {
+          /* prime is best-effort; WS subscription proceeds either way */
         }
-        primedRef.current = true;
-      } catch {
-        /* prime is best-effort; WS subscription proceeds either way */
-      }
-    })();
+      })();
+    } else {
+      primedRef.current = true;
+    }
 
     // Subscribe to the indexer's `jackpot_receipt` fanout topic. Falls back
     // to polling if the WS is unset (env-gated) or sits silent past grace.

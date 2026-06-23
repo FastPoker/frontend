@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { JackpotReceipt } from '@/lib/jpv1';
 import { subscribeIndexerTopic, isIndexerWsEnabled } from '@/hooks/useIndexerTopic';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 import {
   LUCKY_JACKPOT_NAME,
   ROYAL_JACKPOT_NAME,
@@ -59,6 +60,7 @@ export function JackpotCeremonyOverlay({ tablePda }: JackpotCeremonyOverlayProps
     let wsUnsubscribe: (() => void) | null = null;
     seenRef.current = new Set();
     primedRef.current = false;
+    const canUseRecentApi = !STATIC_EXPORT;
 
     const tryFireCeremony = (r: JackpotReceipt) => {
       if (cancelled) return;
@@ -72,6 +74,7 @@ export function JackpotCeremonyOverlay({ tablePda }: JackpotCeremonyOverlayProps
     };
 
     const startPolling = () => {
+      if (!canUseRecentApi) return;
       if (pollTimer) return;
       const tick = async () => {
         if (cancelled) return;
@@ -105,29 +108,33 @@ export function JackpotCeremonyOverlay({ tablePda }: JackpotCeremonyOverlayProps
       }
     };
 
-    // Cold prime once on mount so historical hits never re-fire. Until this
-    // completes, WS/poll pushes are treated as historical (recorded as seen,
-    // NOT fired) — see the primedRef guards below.
-    (async () => {
-      try {
-        const res = await fetch(`/api/jackpots/recent?limit=50`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
-        if (res.ok) {
-          const body = (await res.json()) as { receipts: JackpotReceipt[] };
-          if (!cancelled) {
-            for (const r of body.receipts || []) {
-              if (r.table === tablePda) seenRef.current.add(`${r.txSig}:${r.handNumber}`);
+    if (canUseRecentApi) {
+      // Cold prime once on mount so historical hits never re-fire. Until this
+      // completes, WS/poll pushes are treated as historical (recorded as seen,
+      // NOT fired) — see the primedRef guards below.
+      (async () => {
+        try {
+          const res = await fetch(`/api/jackpots/recent?limit=50`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+          if (res.ok) {
+            const body = (await res.json()) as { receipts: JackpotReceipt[] };
+            if (!cancelled) {
+              for (const r of body.receipts || []) {
+                if (r.table === tablePda) seenRef.current.add(`${r.txSig}:${r.handNumber}`);
+              }
             }
           }
+        } catch {
+          /* prime is best-effort (incl. timeout) */
+        } finally {
+          // Always flip primed after the attempt — even on error/timeout — so the
+          // feed can fire genuinely-new hits. Historical hits fetched above are
+          // already in seenRef, so they won't re-fire.
+          if (!cancelled) primedRef.current = true;
         }
-      } catch {
-        /* prime is best-effort (incl. timeout) */
-      } finally {
-        // Always flip primed after the attempt — even on error/timeout — so the
-        // feed can fire genuinely-new hits. Historical hits fetched above are
-        // already in seenRef, so they won't re-fire.
-        if (!cancelled) primedRef.current = true;
-      }
-    })();
+      })();
+    } else {
+      primedRef.current = true;
+    }
 
     // Subscribe to the indexer's jackpot_receipt fanout topic. Filtering by
     // tablePda happens inside tryFireCeremony, since the topic is global.

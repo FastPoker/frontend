@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 import { levelAtLeast } from '@/lib/user-config';
+import { STATIC_EXPORT } from '@/lib/runtime-mode';
 
 export interface MyActiveTable {
   tablePda: string;
@@ -92,6 +93,10 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
         await publishFallback();
         return;
       }
+      if (STATIC_EXPORT) {
+        await publishFallback();
+        return;
+      }
       const url = `/api/my-sng-tables?wallet=${encodeURIComponent(walletStr)}${force ? '&force=1' : ''}`;
       const res = await fetch(url);
       if (!res.ok) {
@@ -99,6 +104,10 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
         return;
       }
       const data = await res.json();
+      if (data?.serverRpcConfigured === false) {
+        await publishFallback();
+        return;
+      }
       if (activeWallet !== walletStr) return;
       const tables: MyActiveTable[] = Array.isArray(data?.tables)
         ? data.tables.filter((t: any) => typeof t?.tablePda === 'string')

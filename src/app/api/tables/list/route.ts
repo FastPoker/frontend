@@ -13,6 +13,7 @@ import {
 import { attachTokenDecimals } from '@/lib/mint-decimals';
 import { getTableBlacklist } from '@/lib/table-blacklist';
 import { ANCHOR_PROGRAM_ID } from '@/lib/constants';
+import { indexerReadsEnabled } from '@/lib/indexer-env';
 
 export const dynamic = 'force-dynamic';
 
@@ -157,13 +158,34 @@ async function scanProgramTables(l1: Connection): Promise<{
   delegatedAccounts: TableEntry[];
   undelegatedAccounts: TableEntry[];
 }> {
+  const [delKeys, undKeys] = await Promise.all([
+    l1.getProgramAccounts(DELEGATION_PROGRAM_ID, { filters: [discFilter], dataSlice: { offset: 0, length: 0 } }).catch(() => []),
+    l1.getProgramAccounts(PROGRAM_ID, { filters: [discFilter], dataSlice: { offset: 0, length: 0 } }).catch(() => []),
+  ]);
+  const fetchEntries = async (keys: PublicKey[]): Promise<TableEntry[]> => {
+    const out: TableEntry[] = [];
+    for (let i = 0; i < keys.length; i += 100) {
+      const batch = keys.slice(i, i + 100);
+      const infos = await l1.getMultipleAccountsInfo(batch, 'confirmed').catch(() => null);
+      if (!infos) continue;
+      for (let j = 0; j < batch.length; j += 1) {
+        const info = infos[j];
+        if (!info) continue;
+        out.push({
+          pubkey: batch[j],
+          account: { data: Buffer.from(info.data), lamports: info.lamports, owner: info.owner },
+        });
+      }
+    }
+    return out;
+  };
   const [del, und] = await Promise.all([
-    l1.getProgramAccounts(DELEGATION_PROGRAM_ID, { filters: [discFilter] }).catch(() => []),
-    l1.getProgramAccounts(PROGRAM_ID, { filters: [discFilter] }).catch(() => []),
+    fetchEntries(delKeys.map((a) => a.pubkey)),
+    fetchEntries(undKeys.map((a) => a.pubkey)),
   ]);
   return {
-    delegatedAccounts: del.map((a) => ({ pubkey: a.pubkey, account: { data: Buffer.from(a.account.data), lamports: a.account.lamports, owner: a.account.owner } })),
-    undelegatedAccounts: und.map((a) => ({ pubkey: a.pubkey, account: { data: Buffer.from(a.account.data), lamports: a.account.lamports, owner: a.account.owner } })),
+    delegatedAccounts: del,
+    undelegatedAccounts: und,
   };
 }
 
@@ -196,15 +218,17 @@ async function getIndexedOrScannedAccounts(l1: Connection | null): Promise<{
   undelegatedAccounts: TableEntry[];
   indexerStatus?: RawTablesIndexerStatus;
 }> {
-  const raw = await fetchRawTablesViaIndexer({});
-  if (raw?.entries.length) {
-    return { ...splitEntries(raw.entries), indexerStatus: raw.status };
-  }
+  if (indexerReadsEnabled()) {
+    const raw = await fetchRawTablesViaIndexer({});
+    if (raw?.entries.length) {
+      return { ...splitEntries(raw.entries), indexerStatus: raw.status };
+    }
 
-  const indexerPubkeys = await discoverViaIndexer({});
-  if (indexerPubkeys && l1) {
-    const split = await fetchTablesByPubkey(l1, indexerPubkeys);
-    return { delegatedAccounts: split.delegated, undelegatedAccounts: split.undelegated };
+    const indexerPubkeys = await discoverViaIndexer({});
+    if (indexerPubkeys && l1) {
+      const split = await fetchTablesByPubkey(l1, indexerPubkeys);
+      return { delegatedAccounts: split.delegated, undelegatedAccounts: split.undelegated };
+    }
   }
 
   if (l1) return scanProgramTables(l1);
@@ -311,6 +335,8 @@ async function refreshCacheInBackground() {
           hiddenCount,
           indexerStatus,
           teeOverlay,
+          serverRpcConfigured: !!l1,
+          indexerEnabled: indexerReadsEnabled(),
         },
         ts: Date.now(),
       };
@@ -435,11 +461,24 @@ export async function GET(request: Request) {
 
     if (creatorFilter) return await fetchCreatorTables(creatorFilter, gameTypeFilter);
 
+    if (responseCache && responseCache.data.indexerEnabled !== indexerReadsEnabled()) {
+      responseCache = null;
+    }
     if (!responseCache) await runBackgroundRefresh();
 
     ensureBackgroundRefresh();
     if (!responseCache) {
-      return NextResponse.json({ tables: [], delegatedCount: 0, undelegatedCount: 0, hiddenCount: 0, loading: true });
+      const serverRpcConfigured = !!getL1Connection();
+      const indexerEnabled = indexerReadsEnabled();
+      return NextResponse.json({
+        tables: [],
+        delegatedCount: 0,
+        undelegatedCount: 0,
+        hiddenCount: 0,
+        loading: serverRpcConfigured || indexerEnabled,
+        serverRpcConfigured,
+        indexerEnabled,
+      });
     }
 
     const cashOnly = gameTypeFilter !== null && Number(gameTypeFilter) === 3;
@@ -460,6 +499,8 @@ export async function GET(request: Request) {
       cached: true,
       nextCursor: paged.nextCursor,
       snapshotId: paged.snapshotId,
+      serverRpcConfigured: responseCache.data.serverRpcConfigured ?? true,
+      indexerEnabled: responseCache.data.indexerEnabled ?? indexerReadsEnabled(),
     });
   } catch (error: any) {
     console.error('[tables/list] error:', error);
@@ -476,14 +517,14 @@ async function fetchCreatorTables(creatorFilter: string, gameTypeFilter: string 
   }
 
   const l1 = getL1Connection();
-  const raw = await fetchRawTablesViaIndexer({});
+  const raw = indexerReadsEnabled() ? await fetchRawTablesViaIndexer({}) : null;
   let indexerDelegated: TableEntry[] = [];
   let indexerUndelegated: TableEntry[] = [];
   if (raw?.entries.length) {
     const split = splitEntries(raw.entries);
     indexerDelegated = split.delegatedAccounts;
     indexerUndelegated = split.undelegatedAccounts;
-  } else if (l1) {
+  } else if (l1 && indexerReadsEnabled()) {
     const indexerPubkeys = await discoverViaIndexer({ creator: creatorFilter });
     if (indexerPubkeys) {
       const split = await fetchTablesByPubkey(l1, indexerPubkeys);

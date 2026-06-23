@@ -22,7 +22,7 @@ if [ -d 'src/app/profile/[address]' ]; then
   mv 'src/app/profile/[address]' "$PROFILE_DYNAMIC_STASH"
 fi
 
-NEXT_OUTPUT=export next build
+NEXT_PUBLIC_STATIC_EXPORT=true NEXT_OUTPUT=export next build
 
 echo ""
 echo "Static export written to ./out"
