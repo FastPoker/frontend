@@ -124,9 +124,10 @@ Those profiles are standalone and read-only: on-chain XP plus the operator's own
 indexer MongoDB, not the original fast.poker/clientv2 database.
 
 The indexer needs MongoDB, a paid/dedicated mainnet RPC, and a stream provider for
-live production-quality updates. The bundled stream adapter is LaserStream/Geyser
-compatible, but `RPC_URL` is provider-neutral and standard Solana RPC history is
-supported as a slower fallback. It listens on `INDEXER_PORT` (default 3001); set
+live production-quality FULL updates. The bundled stream adapter is
+LaserStream/Geyser compatible, but `RPC_URL` is provider-neutral and standard
+Solana RPC history is only a slower smoke/backfill fallback. It listens on
+`INDEXER_PORT` (default 3001); set
 the web app's `NEXT_PUBLIC_ENABLE_INDEXER=true` plus `INDEXER_BASE_URL` to turn on
 frontend indexed reads, and optionally set
 `NEXT_PUBLIC_INDEXER_WS_URL` (browser live push, set before building) at wherever
@@ -253,7 +254,7 @@ operator fee; static export; MIT license and trademark docs.
 - Process-local social storage works in node mode, but show-cards/player-notes are
   in-memory unless an operator adds a persistent store.
 - Indexer operation is not free-pool infrastructure. It needs MongoDB and a
-  paid/dedicated RPC; live production updates also need stream credentials.
+  paid/dedicated RPC; production FULL/live updates also need stream credentials.
 - Legal copy still needs operator replacement before a public white-label release.
 
 ---

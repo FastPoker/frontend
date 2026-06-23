@@ -15,9 +15,9 @@ instructions. Users can run the source however they want. The supported paths ar
 This is a fully functional frontend template/reference implementation. Users may
 run it as-is, fork/rebrand it, or use it as the base for their own frontend.
 
-Use `SETUP.md` for exact setup commands and `OVERVIEW.md` for architecture,
-feature parity, status, and release gates. Use `AGENT_SETUP.md` for a concise
-copy-paste install runbook.
+Use `BEGINNER_GUIDE.md` for the plain-English setup model, `SETUP.md` for exact
+setup commands, and `OVERVIEW.md` for architecture, feature parity, status, and
+release gates. Use `AGENT_SETUP.md` for a concise copy-paste install runbook.
 
 ## Fastest MVR Path
 
@@ -82,7 +82,7 @@ npm ci && npm run start   # from the Indexer package directory
 ```
 
 The indexer is read-only and required for FULL indexed read parity. It needs
-MongoDB, a paid/dedicated mainnet RPC, and stream credentials for production-quality
+MongoDB, a paid/dedicated mainnet RPC, and stream credentials for production FULL
 live data. MongoDB is only required for FULL/indexer mode; MVR, static LIGHT, and
 frontend-only Node mode do not use a database. Wire it by URL only:
 `NEXT_PUBLIC_ENABLE_INDEXER=true` plus

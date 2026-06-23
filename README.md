@@ -31,8 +31,10 @@ features.
   leaderboards, standalone profiles/achievements, richer lobby stats, per-wallet
   jackpot attribution, and live WebSocket push.
 
-For exact commands, see [SETUP.md](./SETUP.md). For architecture, feature parity,
-and release gates, see [OVERVIEW.md](./OVERVIEW.md). Agent setup guidance ships in
+If you are new to this repo or to running Solana frontends, start with
+[BEGINNER_GUIDE.md](./BEGINNER_GUIDE.md). For exact commands, see
+[SETUP.md](./SETUP.md). For architecture, feature parity, and release gates, see
+[OVERVIEW.md](./OVERVIEW.md). Agent setup guidance ships in
 [AGENT_SETUP.md](./AGENT_SETUP.md), [AGENTS.md](./AGENTS.md),
 [CLAUDE.md](./CLAUDE.md), and the portable skill at
 [skills/fastpoker-frontend-public-setup/SKILL.md](./skills/fastpoker-frontend-public-setup/SKILL.md).
@@ -99,7 +101,7 @@ not provide mainnet LaserStream gRPC. That means:
 | MVR local | Node 20+, browser wallet |
 | Static LIGHT | Node 20+ to build, any static host to serve `out/` |
 | Node server | Node 20+, a server/VM/process manager, server-side Solana RPC for hosted traffic |
-| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, optional stream provider for production live updates |
+| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, stream provider for production live updates |
 
 Docker and IPFS are not required by this source release. Use any host or process
 manager you prefer.
@@ -129,6 +131,9 @@ See `.env.example` for the common LIGHT and node-server settings:
   `INDEXER_BASE_URL` points at your own running indexer.
 - `NEXT_PUBLIC_INDEXER_WS_URL` - optional browser WebSocket URL for the source
   indexer.
+- `NEXT_PUBLIC_BRAND_*` - optional white-label name, domain, colors, social
+  links, and asset paths. These are build-time values; rebuild after changing
+  them.
 - `L1_RPC` or `L1_RPC_PROXY_UPSTREAM` - server-side RPC for node relay routes.
 - `AUTHORITY_KEYPAIR_PATH`, `TEE_RPC`, optional `TEE_API_KEY`, and `APP_ORIGIN` -
   required only for node relay routes.

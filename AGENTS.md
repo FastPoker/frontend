@@ -11,8 +11,9 @@ or publish this standalone client.
   run it as-is, fork/rebrand it, or use it as a base for a custom frontend.
 - The easiest path is MVR / LIGHT: `npm ci`, `cp .env.example .env.local`,
   `npm run dev`, or `npm run build:static`.
-- Treat `SETUP.md` as the human setup source of truth and `OVERVIEW.md` as the
-  architecture/status source of truth.
+- Treat `BEGINNER_GUIDE.md` as the plain-English starting point, `SETUP.md` as
+  the human command source of truth, and `OVERVIEW.md` as the architecture/status
+  source of truth.
 - Use `AGENT_SETUP.md` when a user wants a copy-paste install runbook for Codex,
   Claude, or another coding agent.
 
@@ -111,4 +112,4 @@ npm run typecheck   # from the Indexer package directory
   production-certified: create cash table, sit, play one hand, cash out, plus SNG
   join/play.
 - FULL indexer must be tested with the operator's real MongoDB, RPC, and stream
-  credentials.
+  credentials; production FULL/live mode requires streaming.

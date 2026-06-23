@@ -32,7 +32,7 @@ the public indexer adapter.
 
 For FULL indexed reads, also help me run the separate Indexer package. MongoDB is
 required for FULL. SQLite is not supported in this release. The indexer also
-needs a paid/dedicated Solana RPC, and production live updates should use a
+needs a paid/dedicated Solana RPC, and production FULL/live updates require a
 stream provider. Wire the frontend with:
 - NEXT_PUBLIC_ENABLE_INDEXER=true
 - INDEXER_BASE_URL=http://localhost:3001

@@ -1,6 +1,8 @@
 # Source Setup
 
-This repo ships as source code. The easiest route is **MVR / LIGHT**: install
+This repo ships as source code. If you are new to the project, start with
+[BEGINNER_GUIDE.md](./BEGINNER_GUIDE.md) first, then use this file as the command
+reference. The easiest route is **MVR / LIGHT**: install
 dependencies, run the frontend, or export static files. No private backend,
 database, or keypair is required for that path.
 
@@ -13,7 +15,7 @@ Choose the smallest path that fits what you want to run:
 | MVR local dev | Node 20+ (`.nvmrc` currently pins 22), browser wallet |
 | Static LIGHT release | Node 20+ to build, any static host to serve `out/` |
 | Node server | Node 20+, a server/VM/process manager, paid/dedicated Solana RPC recommended for hosted traffic |
-| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, optional stream provider for production live updates |
+| FULL source mode | Node 20+, this frontend, the separate Indexer package, MongoDB, paid/dedicated Solana RPC, stream provider for production live updates |
 
 MongoDB is required only for FULL indexed reads because the indexer stores
 chain-derived tables, hands, player stats, jackpots, and leaderboards there.
@@ -196,8 +198,9 @@ code; the original FastPoker name, logos, and token marks are not yours to ship.
 ## 8. Agent-Assisted Setup
 
 If you want Codex, Claude, or another coding agent to install and verify the
-source release, point it at [AGENT_SETUP.md](./AGENT_SETUP.md). That file is a
-copy-paste runbook for MVR, static, Node server, and FULL indexer setup.
+source release, point it at [BEGINNER_GUIDE.md](./BEGINNER_GUIDE.md) for the
+plain-English model and [AGENT_SETUP.md](./AGENT_SETUP.md) for the executable
+runbook. That file covers MVR, static, Node server, and FULL indexer setup.
 
 ## 9. Validation
 

@@ -18,6 +18,7 @@ wallet-signed protocol transactions.
 
 Use these repo docs as source of truth:
 
+- `BEGINNER_GUIDE.md` for the plain-English setup model and common issues.
 - `SETUP.md` for human setup commands.
 - `OVERVIEW.md` for architecture, feature parity, status, and release gates.
 - `AGENT_SETUP.md` for a copy-paste install runbook for coding agents.
@@ -94,8 +95,8 @@ browser live push if set before building.
   them as frontend-added SOL transfers shown to users, not protocol rake,
   prize-pool changes, or custody logic.
 - The indexer is read-only and required for FULL indexed read parity. It needs
-  MongoDB, a paid/dedicated RPC, and stream credentials for production-quality
-  live data.
+  MongoDB, a paid/dedicated RPC, and stream credentials for production FULL live
+  data.
 - Browser indexer reads are explicit. Leave `NEXT_PUBLIC_ENABLE_INDEXER=false`
   unless the operator is running the source indexer and has set `INDEXER_BASE_URL`.
 - FULL cash table listing uses `/api/tables/list`; with `NEXT_PUBLIC_ENABLE_INDEXER=true`
