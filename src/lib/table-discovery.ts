@@ -17,19 +17,23 @@ import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
 import { makeL1Connection, ANCHOR_PROGRAM_ID, USDC_DEVNET_MINT, USDC_MAINNET_MINT } from './constants';
 import { ACCOUNT_DISC } from './discriminators';
 import { parseTableState, OnChainGameType, getMultipleAccountsInfoChunked, TABLE_OFFSETS, type TableState } from './onchain-game';
+import { decodeV2Accounts, getProgramAccountsV2 } from './helius-tx';
+import { getEffectiveRpcUrl } from './user-config';
 
 const DELEGATION_PROGRAM_ID = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
 const SEAT_WALLET_OFFSET = 8;
 const SEAT_TABLE_OFFSET = 72;
 const TABLE_CREATOR_OFFSET = 290;
-const TABLE_ALLOC_SIZE = 478;
 const TABLE_DISC = ACCOUNT_DISC.Table;
+const SEAT_DISC = ACCOUNT_DISC.PlayerSeat;
 
 export interface DiscoveredTable {
   pubkey: string;
   state: TableState;
   /** Owned by the delegation program on L1 = currently delegated (in play). */
   isDelegated: boolean;
+  isSeated: boolean;
+  isCreated: boolean;
 }
 
 export interface LobbyDiscoveredTable {
@@ -77,13 +81,89 @@ const tableDiscFilter = {
     encoding: 'base64' as const,
   },
 };
+const seatDiscFilter = {
+  memcmp: {
+    offset: 0,
+    bytes: Buffer.from(SEAT_DISC).toString('base64'),
+    encoding: 'base64' as const,
+  },
+};
+
+function u8Filter(offset: number, value: number) {
+  return {
+    memcmp: {
+      offset,
+      bytes: Buffer.from([value]).toString('base64'),
+      encoding: 'base64' as const,
+    },
+  };
+}
+
+async function getProgramAccountPubkeysViaV2(program: PublicKey, filters: any[]): Promise<string[]> {
+  const rpcUrl = getEffectiveRpcUrl();
+  if (!rpcUrl || rpcUrl === 'pool') return [];
+  const out: string[] = [];
+  let paginationKey: string | undefined;
+  try {
+    do {
+      const page = await getProgramAccountsV2(rpcUrl, {
+        programId: program.toBase58(),
+        filters,
+        dataSlice: { offset: 0, length: 0 },
+        paginationKey,
+      });
+      for (const account of page.accounts) out.push(account.pubkey);
+      paginationKey = page.paginationKey ?? undefined;
+    } while (paginationKey);
+  } catch {
+    return [];
+  }
+  return out;
+}
 
 async function gpaPubkeys(conn: Connection, program: PublicKey, filters: any[]): Promise<string[]> {
   try {
     const accts = await conn.getProgramAccounts(program, { filters, dataSlice: { offset: 0, length: 0 } });
     return accts.map((a) => a.pubkey.toBase58());
   } catch {
-    return []; // free pool blocks gPA
+    return getProgramAccountPubkeysViaV2(program, filters);
+  }
+}
+
+async function gpaSeatTablePubkeys(conn: Connection, program: PublicKey, wallet: string): Promise<string[]> {
+  const filters: any[] = [seatDiscFilter, { memcmp: { offset: SEAT_WALLET_OFFSET, bytes: wallet } }];
+  try {
+    const seats = await conn.getProgramAccounts(program, {
+      filters,
+      dataSlice: { offset: SEAT_TABLE_OFFSET, length: 32 },
+    });
+    return seats
+      .filter((seat) => seat.account.data.length >= 32)
+      .map((seat) => new PublicKey(Buffer.from(seat.account.data).subarray(0, 32)).toBase58());
+  } catch {
+    const rpcUrl = getEffectiveRpcUrl();
+    if (!rpcUrl || rpcUrl === 'pool') return [];
+    const out: string[] = [];
+    let paginationKey: string | undefined;
+    try {
+      do {
+        const page = await getProgramAccountsV2(rpcUrl, {
+          programId: program.toBase58(),
+          filters,
+          dataSlice: { offset: SEAT_TABLE_OFFSET, length: 32 },
+          paginationKey,
+        });
+        for (const account of decodeV2Accounts(page.accounts)) {
+          if (account.data.length >= 32) {
+            out.push(new PublicKey(account.data.subarray(0, 32)).toBase58());
+          }
+        }
+        paginationKey = page.paginationKey ?? undefined;
+      } while (paginationKey);
+    } catch {
+      return [];
+    }
+    return out;
   }
 }
 
@@ -103,15 +183,26 @@ function isCurrentProgramTablePda(pubkey: PublicKey, data: Buffer): boolean {
   }
 }
 
-async function gpaTablePubkeys(conn: Connection, program: PublicKey): Promise<PublicKey[]> {
+async function gpaTablePubkeys(
+  conn: Connection,
+  program: PublicKey,
+  opts: { creator?: string; gameType?: number } = {},
+): Promise<PublicKey[]> {
+  const filters: any[] = [tableDiscFilter];
+  if (opts.gameType !== undefined) filters.push(u8Filter(TABLE_OFFSETS.GAME_TYPE, opts.gameType));
+  if (opts.creator) filters.push({ memcmp: { offset: TABLE_CREATOR_OFFSET, bytes: opts.creator } });
   try {
     const accounts = await conn.getProgramAccounts(program, {
-      filters: [tableDiscFilter],
+      filters,
       dataSlice: { offset: 0, length: 0 },
     });
     return accounts.map((account) => account.pubkey);
   } catch {
-    return [];
+    return (await getProgramAccountPubkeysViaV2(program, filters))
+      .map((pubkey) => {
+        try { return new PublicKey(pubkey); } catch { return null; }
+      })
+      .filter((pubkey): pubkey is PublicKey => !!pubkey);
   }
 }
 
@@ -196,8 +287,8 @@ async function runLobbyScan(opts: { creator?: string; gameType?: number; limit?:
   const conn = makeL1Connection();
   const pubkeys = new Map<string, PublicKey>();
   const [delegatedPubkeys, undelegatedPubkeys] = await Promise.all([
-    gpaTablePubkeys(conn, DELEGATION_PROGRAM_ID),
-    gpaTablePubkeys(conn, ANCHOR_PROGRAM_ID),
+    gpaTablePubkeys(conn, DELEGATION_PROGRAM_ID, opts),
+    gpaTablePubkeys(conn, ANCHOR_PROGRAM_ID, opts),
   ]);
   for (const key of [...delegatedPubkeys, ...undelegatedPubkeys]) pubkeys.set(key.toBase58(), key);
   const keys = Array.from(pubkeys.values());
@@ -222,28 +313,27 @@ async function runLobbyScan(opts: { creator?: string; gameType?: number; limit?:
 async function run(wallet: string): Promise<DiscoveredTable[]> {
   const conn = makeL1Connection();
   const pdas = new Set<string>();
+  const sources = new Map<string, { seat: boolean; creator: boolean }>();
+  const mark = (pubkey: string, source: 'seat' | 'creator') => {
+    pdas.add(pubkey);
+    const current = sources.get(pubkey) ?? { seat: false, creator: false };
+    current[source] = true;
+    sources.set(pubkey, current);
+  };
 
   for (const program of [ANCHOR_PROGRAM_ID, DELEGATION_PROGRAM_ID]) {
     // (a) tables I'm SEATED at: seat.wallet@8 → read seat.table@72
-    try {
-      const seats = await conn.getProgramAccounts(program, {
-        filters: [{ memcmp: { offset: SEAT_WALLET_OFFSET, bytes: wallet } }],
-        dataSlice: { offset: SEAT_TABLE_OFFSET, length: 32 },
-      });
-      for (const s of seats) {
-        if (s.account.data.length >= 32) {
-          pdas.add(new PublicKey(Buffer.from(s.account.data).subarray(0, 32)).toBase58());
-        }
-      }
-    } catch {
-      /* gPA blocked (free pool) */
+    for (const p of await gpaSeatTablePubkeys(conn, program, wallet)) {
+      mark(p, 'seat');
     }
+
     // (b) tables I CREATED: table.creator@290 (idle tables have no seat rows)
     for (const p of await gpaPubkeys(conn, program, [
-      { dataSize: TABLE_ALLOC_SIZE },
+      tableDiscFilter,
+      u8Filter(TABLE_OFFSETS.GAME_TYPE, OnChainGameType.CashGame),
       { memcmp: { offset: TABLE_CREATOR_OFFSET, bytes: wallet } },
     ])) {
-      pdas.add(p);
+      mark(p, 'creator');
     }
   }
 
@@ -255,7 +345,14 @@ async function run(wallet: string): Promise<DiscoveredTable[]> {
       if (!info) return;
       const state = parseTableState(Buffer.from(info.data));
       if (!state || state.gameType !== OnChainGameType.CashGame) return;
-      out.push({ pubkey: list[i], state, isDelegated: !info.owner.equals(ANCHOR_PROGRAM_ID) });
+      const source = sources.get(list[i]) ?? { seat: false, creator: false };
+      out.push({
+        pubkey: list[i],
+        state,
+        isDelegated: !info.owner.equals(ANCHOR_PROGRAM_ID),
+        isSeated: source.seat,
+        isCreated: source.creator,
+      });
     });
   }
   return out;

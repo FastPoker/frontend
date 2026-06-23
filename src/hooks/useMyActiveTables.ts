@@ -81,6 +81,24 @@ async function fetchOnce(walletStr: string, force = false): Promise<void> {
       } catch {
         // Leave empty on RPC failure.
       }
+      try {
+        const { discoverMyCashTables } = await import('@/lib/table-discovery');
+        const cashRows: MyActiveTable[] = (await discoverMyCashTables(walletStr).catch(() => []))
+          .filter((table) => table.isSeated)
+          .map((table) => ({
+            tablePda: table.pubkey,
+            type: 'cash',
+            maxPlayers: table.state.maxPlayers,
+            tier: 0,
+            phase: table.state.phase,
+          }));
+        const seen = new Set(rows.map((row) => row.tablePda));
+        for (const row of cashRows) {
+          if (!seen.has(row.tablePda)) rows.push(row);
+        }
+      } catch {
+        // Cash active-table fallback is best-effort.
+      }
       if (activeWallet === walletStr && startedAt >= lastPublishedAtMs) {
         lastPublishedAtMs = startedAt;
         publish({ tables: rows, loaded: true, asOfMs: startedAt });
