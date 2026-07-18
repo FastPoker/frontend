@@ -100,6 +100,16 @@ function railCardTopOffsetStyle(pref: PrefCardSize): React.CSSProperties {
 }
 // ReadyOverlay removed — SNG flow no longer has a ready-up gate.
 import { GameEndOverlay, type GameEndResult } from './chrome';
+import BountyDuelHud from '@/components/bounty/BountyDuelHud';
+import DuelOverlay from '@/components/bounty/DuelOverlay';
+import BountyHudBar from '@/components/bounty/BountyHudBar';
+import SeatBountyBadge from '@/components/bounty/SeatBountyBadge';
+import { fpEvent } from '@/lib/fp-events';
+import { TokenMark } from '@/components/bounty/TokenMark';
+import { useSngBountyState } from '@/hooks/useSngBountyState';
+import { seatViews, formatPoints } from '@/lib/sng-duel-view';
+import { maturityBps as duelMaturityBps, SOL_BOUNTY_BPS, BOUNTY_UNIT } from '@/lib/sng-duel';
+import { sngDuelsEnabled } from '@/lib/sng-duel-flags';
 
 const SOL_MINT = '11111111111111111111111111111111';
 const POKER_MINT = 'FP111dxqjLRqtuoknQ8L6aaZjqqyFRT6FcAnaCPytJ3';
@@ -214,6 +224,10 @@ interface PokerTableProps {
   /** Hero has already shown this hand. */
   revealedThisHand?: boolean;
   onAction?: (action: string, amount?: number) => void;
+  /** SnG Duels: submit a Bell-duel choice (all-in/fold). Seats come from the sidecar. */
+  onDuelAction?: (action: 'all-in' | 'fold', seatA: number, seatB: number) => Promise<string | null> | void;
+  /** Player-authenticated TEE connection for standalone live duel reads. */
+  bountyTeeConnection?: Connection | null;
   isMyTurn?: boolean;
   sessionClaimRequired?: boolean;
   sessionClaimDebug?: string | null;
@@ -1447,6 +1461,13 @@ function PlayerSeat({
   peekSuppressed = false,
   latchedFolded = false,
   linked = false,
+  koCount = 0,
+  bankedFp = 0,
+  bankedSol = 0,
+  duelSeat = false,
+  duelReveal = false,
+  duelLiveOnFelt = false,
+  shieldMode = false,
 }: {
   player: Player | null;
   pos: SeatPos;
@@ -1485,6 +1506,23 @@ function PlayerSeat({
   profileAvatarImage?: string | null;
   profileAvatarEmoji?: string | null;
   profileName?: string;
+  koCount?: number;
+  bankedFp?: number;
+  bankedSol?: number;
+  /** SnG Duels: seat is an active-duel participant. Forces the card layer during the Waiting-phase
+   *  duel (cardsDealt is false there) so duelists show backs while choosing, face-up on reveal. */
+  duelSeat?: boolean;
+  /** SnG Duels: the current duel round is resolved (both choices in) - only then may duelist cards
+   *  flip face-up. Blocks STALE previous-hand revealed holeCards from leaking mid-duel. */
+  duelReveal?: boolean;
+  /** SnG Duels: ANY duel is live on the felt. Non-duel seats must never show face-up
+   *  cards during the duel beat - holeCards can still hold the previous hand's showdown
+   *  reveal until the next deal (live find 2026-07-04: a duel right after a showdown
+   *  rendered THREE face-up hands - both stale showdown hands plus the duelists'). */
+  duelLiveOnFelt?: boolean;
+  /** Bounty Shield (ruleset 1): koCount is HELD POINTS - same ring dots, point nouns,
+   *  and the pip count may DECREASE when a point is stolen or handed over. */
+  shieldMode?: boolean;
   amountThisStreet?: number;
   totalBet?: number;
   bigBlind?: number;
@@ -1539,6 +1577,34 @@ function PlayerSeat({
   // plate side-by-side (~148px). Compact it on phones — smaller avatar tucked
   // deeper into a narrower plate (a sliver) so the whole seat fits on-screen.
   const seatIsMobile = useIsMobile();
+
+  // [FP-EVT] KO pip timing: emit when this seat's knockout count changes so the
+  // timeline can assert bust -> pip latency (bounded by the bounty poll cadence).
+  // KO reward burst (user request 2026-07-04): the knockout beat must SAY what it
+  // paid - float the banked delta (+$FP/+SOL) above the hunter's seat for a moment.
+  // Bounty Shield: the SAME dots now track held points, which also DECREASE when a
+  // point is stolen/handed over - emit the pip event with the delta both ways (the
+  // ruleset-1 asserter branch keys on this), burst "POINT" framing on gains, and a
+  // brief "-1 POINT" cue on losses.
+  const prevKoRef = useRef(koCount);
+  const prevBankRef = useRef({ fp: bankedFp, sol: bankedSol });
+  const [koBurst, setKoBurst] = useState<{ fp: number; sol: number; delta: number } | null>(null);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const delta = koCount - prevKoRef.current;
+    if (delta !== 0) {
+      fpEvent('seat.ko_pip', { seat: seatIndex, koCount, delta });
+      const dFp = bankedFp - prevBankRef.current.fp;
+      const dSol = bankedSol - prevBankRef.current.sol;
+      if (delta > 0 ? (dFp > 0 || dSol > 0) : shieldMode) {
+        setKoBurst({ fp: Math.max(0, dFp), sol: Math.max(0, dSol), delta });
+        t = setTimeout(() => setKoBurst(null), 3600);
+      }
+    }
+    prevKoRef.current = koCount;
+    prevBankRef.current = { fp: bankedFp, sol: bankedSol };
+    return () => { if (t) clearTimeout(t); };
+  }, [koCount, seatIndex, bankedFp, bankedSol, shieldMode]);
 
   if (!player) {
     const isPendingSeat = pendingJoinSeat === seatIndex;
@@ -1749,7 +1815,7 @@ function PlayerSeat({
           // (z-30) — the same GG layering as opponents. Replaces the old
           // felt-center render that sat behind the whole seat (z-[5]).
           if (isHero) {
-            if (!(heroCardsOnFelt && cardsDealt && !folded && heroCards && heroCards[0] !== 255 && heroCards[0] <= 51 && heroCards[1] <= 51)) return null;
+            if (!(heroCardsOnFelt && (cardsDealt || duelSeat) && !folded && heroCards && heroCards[0] !== 255 && heroCards[0] <= 51 && heroCards[1] <= 51)) return null;
             return (
               <div className={cn(
                 'absolute left-1/2 -translate-x-1/2 pointer-events-none z-20 bottom-full',
@@ -1766,7 +1832,10 @@ function PlayerSeat({
           // and then started cashing out had folded=true (leaving maps to folded),
           // so their revealed hand never rendered — the "no cards show who had
           // cards" report on a stalled/leaving showdown.
-          const showCardLayer = !isHero && cardsDealt && !player.waitingForBb && (
+          const showCardLayer = !isHero && !player.waitingForBb && (
+            // Duelists keep their cards ON THE TABLE through the Waiting-phase duel.
+            duelSeat
+            || (cardsDealt && (
             ((isShowdown || isRunout) && hasRevealedHole)
             // Face-down backs during live betting AND the between-street
             // *RevealPending commit (isRunout) — so a contesting seat's backs do
@@ -1778,6 +1847,7 @@ function PlayerSeat({
             // blanket-hide every seat's backs during the runout. `!isShowdown`
             // still keeps the true-showdown layer on the face-up clause above.
             || (!isShowdown && !folded && !latchedFolded && !((sittingOut || player.isLeaving) && player.bet === 0))
+            ))
           );
           if (!showCardLayer) return null;
           // A revealed leaver/folder isn't part of the staged flip, so show their
@@ -1785,7 +1855,15 @@ function PlayerSeat({
           // be stuck in a stalled showdown). Normal contesting seats still flip via
           // showdownStage.
           const revealedLeaver = isShowdown && hasRevealedHole && (folded || player.isLeaving || sittingOut);
-          const cardsFaceUp = !!(player.holeCards && player.holeCards[0] !== 255 && (isShowdown ? ((showdownStage ?? 0) >= 1 || cardsPreRevealed || revealedLeaver) : true));
+          const cardsFaceUp = duelSeat && !cardsDealt
+            // Mid-duel: BACKS until this round resolves. holeCards can still hold the PREVIOUS
+            // hand's showdown reveal, which must not leak while the duelist is deciding.
+            ? (duelReveal && hasRevealedHole)
+            : duelLiveOnFelt && !cardsDealt
+              // Non-duelists during the duel beat: the previous hand is over; stale showdown
+              // reveals must not sit face-up next to the duel (3-hands-on-felt live find).
+              ? false
+              : !!(player.holeCards && player.holeCards[0] !== 255 && (isShowdown ? ((showdownStage ?? 0) >= 1 || cardsPreRevealed || revealedLeaver) : true));
           return (
           <div className={cn(
             'absolute left-1/2 -translate-x-1/2 pointer-events-none',
@@ -1831,6 +1909,37 @@ function PlayerSeat({
                 frame={frame}
                 showLevelBadge={false}
               />
+              {/* SnG Duels: kill-marker pips over the target ring - one per held bounty point,
+                  5+ collapses to pip + xN. koCount is only populated on duel-format tables
+                  (seatKoBySeat), so this renders nothing everywhere else. Design pick 2026-07-02:
+                  ring pips. Flat bounty (2026-07-14): points move only on knockouts and tied
+                  winners split fractionally, so koCount can be FRACTIONAL (0.5, 1.33) - whole
+                  points render as full dots, a fractional remainder as one dimmed dot. */}
+              {koCount > 0 && (
+                <div
+                  className="pointer-events-none absolute -top-[7px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-[3px]"
+                  data-format="bounty"
+                  title={shieldMode
+                    ? `${formatPoints(koCount)} bounty point${koCount === 1 ? '' : 's'} held`
+                    : `${koCount} knockout${koCount === 1 ? '' : 's'} (bounties collected)`}
+                >
+                  {koCount <= 4 ? (
+                    <>
+                      {Array.from({ length: Math.floor(koCount) }).map((_, i) => (
+                        <span key={i} className="h-[5px] w-[5px] rounded-full bg-amber shadow-[0_0_4px_rgba(255,198,58,0.85)]" />
+                      ))}
+                      {koCount % 1 > 0 && (
+                        <span className="h-[5px] w-[5px] rounded-full bg-amber/40 shadow-[0_0_3px_rgba(255,198,58,0.4)]" />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="h-[5px] w-[5px] rounded-full bg-amber shadow-[0_0_4px_rgba(255,198,58,0.85)]" />
+                      <span className="font-display text-[9px] leading-none text-amber drop-shadow-[0_0_3px_rgba(255,198,58,0.6)]">&times;{formatPoints(koCount)}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
@@ -2106,6 +2215,28 @@ function PlayerSeat({
         {/* Winner payout now renders INSIDE the nameplate (see isWinnerDisplay
             above) — no floating pill below the seat. */}
 
+        {/* KO reward burst: what THIS knockout banked for the hunter. Shield tables
+            frame it as points (gains show the banked delta; losses show the point
+            leaving so the dot change reads as an event, not a glitch). */}
+        {koBurst && (
+          <div className={cn(
+            'absolute z-40 left-1/2 -translate-x-1/2 -top-10 fade-up pointer-events-none whitespace-nowrap rounded-md bg-black/85 px-2 py-1 font-mono text-[10px]',
+            koBurst.delta > 0
+              ? 'border border-amber/50 shadow-[0_0_14px_rgba(255,198,58,0.25)]'
+              : 'border border-rose-500/40 shadow-[0_0_14px_rgba(244,63,94,0.2)]',
+          )}>
+            {koBurst.delta > 0 ? (
+              <>
+                <span className="text-amber font-bold tracking-[0.12em]">{shieldMode ? `+${formatPoints(koBurst.delta)} POINT ` : 'KO '}</span>
+                {koBurst.fp > 0 && <span className="text-gold tabular-nums">+{Math.round(koBurst.fp)} $FP&nbsp;</span>}
+                {koBurst.sol > 0 && <span className="inline-flex items-baseline gap-0.5 text-emerald-400 tabular-nums">+{koBurst.sol.toFixed(3)}<TokenMark t="sol" size={9} /></span>}
+              </>
+            ) : (
+              <span className="text-rose-300 font-bold tracking-[0.12em]">{formatPoints(koBurst.delta)} POINT</span>
+            )}
+          </div>
+        )}
+
         {/* Hover peek — stack / in-pot / wallet. Opponents only: the hero hovering
             their own avatar reveals their cards (the muck peek), not a stats panel
             about themselves. Viewport-aware: grows downward for top-row seats and
@@ -2139,6 +2270,27 @@ function PlayerSeat({
               <span className="font-mono text-[9px] tracking-[0.16em] text-bone/45 uppercase">In pot</span>
               <span className="font-mono text-[11px] text-orange tabular-nums">{fmtVal(totalBet)}</span>
             </div>
+            {koCount > 0 && (
+              <>
+                <div className="h-px w-full" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                {/* Duel-mode kill sheet (user ask 2026-07-03): the hover card is where you
+                    size up an opponent - show their knockouts + banked bounty here.
+                    Shield tables: the same number is their held points. */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-mono text-[9px] tracking-[0.16em] text-amber/70 uppercase">{shieldMode ? 'Points' : 'Knockouts'}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-amber">&times;{koCount}</span>
+                </div>
+                {(bankedFp > 0 || bankedSol > 0) && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-mono text-[9px] tracking-[0.16em] text-bone/45 uppercase">Banked</span>
+                    <span className="inline-flex items-baseline gap-1.5 font-mono text-[10px] tabular-nums">
+                      <span className="text-gold">{Math.round(bankedFp).toLocaleString()} FP</span>
+                      <span className="inline-flex items-baseline gap-0.5 text-emerald-400">{bankedSol.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<TokenMark t="sol" size={9} /></span>
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
             <div className="h-px w-full" style={{ background: 'rgba(255,255,255,0.05)' }} />
             <div className="flex items-center justify-between gap-4">
               <span className="font-mono text-[9px] tracking-[0.16em] text-bone/45 uppercase">Wallet</span>
@@ -2507,6 +2659,48 @@ function SpectatorCockpit({
 // the hand means a stale selection never carries into a different hand on return.
 type PreActionKind = 'check-fold' | 'check' | 'call-any';
 const preActionStore = new Map<string, { action: PreActionKind; hand: number }>();
+
+// Sticky seat -> pubkey memory (finding 2026-07-04): the roster empties when the table
+// resets for reuse, and anything resolving a seat name at that moment (TOP HUNTERS,
+// standings OUT rows) regresses to "Seat N". Module-level so child components
+// (SngStandings) resolve through it too; keyed per table, cleared on table switch.
+const seatPubkeyMemo = new Map<number, string>();
+let seatPubkeyMemoTable: string | null = null;
+// Reload persistence (#24): the memo is per-tab session state, so a page reload
+// mid-game must not lose it (names on OUT rows / Top Hunters, hero-seat recovery).
+const seatMemoStorageKey = (tablePda: string) => `fp.seatmemo.${tablePda}`;
+function persistSeatMemo(tablePda: string): void {
+  try {
+    sessionStorage.setItem(seatMemoStorageKey(tablePda), JSON.stringify([...seatPubkeyMemo]));
+  } catch { /* storage full/blocked - memo still works in-memory */ }
+}
+function hydrateSeatMemo(tablePda: string): void {
+  try {
+    const raw = sessionStorage.getItem(seatMemoStorageKey(tablePda));
+    if (!raw) return;
+    for (const [seat, pubkey] of JSON.parse(raw) as Array<[number, string]>) {
+      if (typeof seat === 'number' && typeof pubkey === 'string') seatPubkeyMemo.set(seat, pubkey);
+    }
+  } catch { /* corrupt entry - start clean */ }
+}
+function rememberSeatPubkeys(tablePda: string, players: { seatIndex: number; pubkey: string | null }[]): void {
+  if (seatPubkeyMemoTable !== tablePda) {
+    seatPubkeyMemo.clear();
+    seatPubkeyMemoTable = tablePda;
+    if (typeof window !== 'undefined') hydrateSeatMemo(tablePda);
+  }
+  let changed = false;
+  for (const p of players) {
+    if (p.pubkey && !p.pubkey.startsWith('seat-') && seatPubkeyMemo.get(p.seatIndex) !== p.pubkey) {
+      seatPubkeyMemo.set(p.seatIndex, p.pubkey);
+      changed = true;
+    }
+  }
+  if (changed && typeof window !== 'undefined') persistSeatMemo(tablePda);
+}
+function rememberedSeatPubkey(seat: number): string | undefined {
+  return seatPubkeyMemo.get(seat);
+}
 
 export function BettingControls({
   phase, currentBet, myBet, myChips, pot, bigBlind, onAction, isMyTurn,
@@ -3452,14 +3646,28 @@ const SNG_BLIND_LEVELS: [number, number][] = [
 
 // Live "Next blinds in MM:SS" countdown for SNG tables. Null until the
 // tournament clock starts (first hand sets tournament_start on-chain).
-function NextBlindsTimer({ tournamentStartTime }: { tournamentStartTime?: number }) {
+// Duel pause (Flat Bounty): a live duel PAUSES the tournament clock on-chain and
+// tournament_start shifts forward by the pause duration at resolve. `pausedAtTs`
+// is the on-chain pause stamp (sidecar duel_pause_started_ts): while set, elapsed
+// is computed AT the stamp, so the display freezes at the exact on-chain moment
+// regardless of how late the poll noticed. After resolve, elapsed resumes from
+// that same value once the shifted start arrives; the continuity clamp bridges
+// the window where the pause has cleared but the stale start hasn't refreshed.
+function NextBlindsTimer({ tournamentStartTime, pausedAtTs = null }: { tournamentStartTime?: number; pausedAtTs?: number | null }) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const elapsedFloorRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
   }, []);
   if (!tournamentStartTime) return null;
-  const elapsed = Math.max(0, now - tournamentStartTime);
+  const frozen = pausedAtTs != null && pausedAtTs > 0;
+  const rawElapsed = Math.max(0, (frozen ? Math.min(pausedAtTs, now) : now) - tournamentStartTime);
+  // Elapsed is monotonic within one game (pauses only shift the start forward), so a
+  // large regression means the table was reused for a new game - reset the floor.
+  if (rawElapsed + 120 < elapsedFloorRef.current) elapsedFloorRef.current = 0;
+  const elapsed = Math.max(rawElapsed, elapsedFloorRef.current);
+  elapsedFloorRef.current = elapsed;
   const maxIdx = SNG_BLIND_LEVELS.length - 1;
   const levelIdx = Math.min(Math.floor(elapsed / SNG_BLIND_INTERVAL_SECONDS), maxIdx);
   const atMax = levelIdx >= maxIdx;
@@ -3471,6 +3679,13 @@ function NextBlindsTimer({ tournamentStartTime }: { tournamentStartTime?: number
       <span className="font-mono text-[9px] text-orange/70 tracking-[0.2em] uppercase">Next Blinds</span>
       {atMax ? (
         <span className="font-mono text-[10px] text-boneDim tracking-wider">Final level</span>
+      ) : frozen ? (
+        <span className="font-mono text-[10px] tabular-nums">
+          <span className="text-bone">{next[0]}/{next[1]}</span>
+          <span className="text-boneDim"> in </span>
+          <span className="text-bone/60">{mmss}</span>
+          <span className="ml-1.5 rounded-full border border-amber/40 bg-amber/10 px-1.5 py-px text-[8px] uppercase tracking-[0.16em] text-amber">paused &middot; duel</span>
+        </span>
       ) : (
         <span className="font-mono text-[10px] text-bone tabular-nums">
           {next[0]}/{next[1]}
@@ -3482,7 +3697,33 @@ function NextBlindsTimer({ tournamentStartTime }: { tournamentStartTime?: number
   );
 }
 
-function SngStandings({ players, blinds, isCashGame, myPubkey, totalPlayers, itmCount, tournamentStartTime }: {
+/** SnG Duels right-rail data (pool/buy-in header + per-seat collected bounties + live duel). */
+interface BountyRailData {
+  potFp: number;
+  potSol: number;
+  /** $FP pool at the CURRENT maturity - what the rows project today; grows each level to potFp. */
+  potFpMatured: number;
+  maturityPct: number;
+  buyInSol: number;
+  /** True once the on-chain jackpot snapshot funded (potFp is then the exact pool, not an estimate). */
+  potFpFunded: boolean;
+  /** Current emission-governor rate in bps (null if EmissionCtrl unreadable). */
+  emissionRateBps: number | null;
+  seatKo: Record<number, number>;
+  seatFp: Record<number, number>;
+  seatSol: Record<number, number>;
+  /** Flat Bounty ruleset marker (always 1 on duel sidecars). */
+  ruleset?: number;
+  /** Busted seats -> blind level they busted at. Standings keep showing them (who got what). */
+  seatEliminated: Record<number, number>;
+  /** Latched hero seat (survives the hero busting) so their rows/bank keep rendering. */
+  heroSeat: number | null;
+  duel: { round: number; seatA: number; seatB: number } | null;
+  /** On-chain blind-clock pause stamp (unix s); nonzero while a duel holds the clock. */
+  duelPausedAtTs: number | null;
+}
+
+function SngStandings({ players, blinds, isCashGame, myPubkey, totalPlayers, itmCount, tournamentStartTime, bountyRail }: {
   players: Player[];
   blinds: { small: number; big: number };
   isCashGame: boolean;
@@ -3490,21 +3731,89 @@ function SngStandings({ players, blinds, isCashGame, myPubkey, totalPlayers, itm
   totalPlayers?: number;
   itmCount?: number;
   tournamentStartTime?: number;
+  bountyRail?: BountyRailData;
 }) {
   if (isCashGame) return null;
-  // SNG: a sitting-out seat is still in the tournament (has chips, is dealt +
-  // blinded off, can act-to-return), so it counts as alive. Busted/Empty seats
-  // are already filtered out of `players` upstream. (SNG-only — cash returns
-  // null above.)
-  const alive = [...players].filter(p => p.isActive || p.isSittingOut).sort((a, b) => b.chips - a.chips);
-  if (alive.length === 0) return null;
+  // SNG: TOURNAMENT standings, not hand standings. Busted/Empty seats are already
+  // filtered out of `players` upstream, so EVERY remaining entry is still in the
+  // tournament - including seats that folded THIS hand (folded => !isActive, which the
+  // old isActive||isSittingOut filter wrongly dropped: "STANDINGS 5/9" mid-hand with 9
+  // alive, live finding 2026-07-03). (SNG-only - cash returns null above.)
+  const alive = [...players].sort((a, b) => b.chips - a.chips);
+  // Bounty tables keep the standings up even with no alive seats visible (busted hero watching along).
+  if (alive.length === 0 && !bountyRail) return null;
+  // Busted seats stay listed on bounty tables: who collected what matters. Latest bust first.
+  const busted = bountyRail
+    ? Object.entries(bountyRail.seatEliminated)
+        .map(([s, lvl]) => ({ seat: Number(s), lvl }))
+        .filter(({ seat }) => !alive.some(p => p.seatIndex === seat))
+        .sort((a, b) => b.lvl - a.lvl)
+    : [];
   const total = totalPlayers ?? players.length;
   const playersLeft = alive.length;
   const itm = itmCount ?? (total <= 2 ? 1 : total <= 6 ? 2 : 3);
+  const shieldMode = (bountyRail?.ruleset ?? 0) === 1;
+  const bountyUnitLabel = (n: number) => shieldMode ? `${formatPoints(n)} pt${n === 1 ? '' : 's'}` : `×${n}`;
 
   return (
     <div className="hairline-b">
-      <NextBlindsTimer tournamentStartTime={tournamentStartTime} />
+      {/* SnG Duels: pools + buy-in header. BOUNTY POOL = all $FP (pure bounty) + the SOL bounty
+          half; ITM POOL = the SOL finish half.
+          Tightened 2026-07-03 (user crop): every label is ONE line on a shared baseline - the
+          governor estimate no longer wraps the first label to two lines and shoves its value
+          off-baseline. SOL values all render 2 decimals (0.10, not 0.1). */}
+      {bountyRail && (
+        <div className="px-3 py-2 hairline-b grid grid-cols-3 gap-2" data-format="bounty">
+          <div className="flex flex-col leading-none">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-[8px] uppercase tracking-widest text-amber/60">
+              Bounty pool
+              {/* Governed emission estimate (`~` = pre-funding). Micro-pill, not label text. */}
+              {bountyRail.emissionRateBps != null && !bountyRail.potFpFunded && (
+                <span
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-1 py-px text-[7px] tracking-[0.08em] text-bone/45"
+                  title={`$FP figure is an estimate at the current ${Math.round(bountyRail.emissionRateBps / 100)}% emission rate; exact once funded`}
+                >
+                  ~{Math.round(bountyRail.emissionRateBps / 100)}%
+                </span>
+              )}
+              {/* Maturity: the $FP value shown is the CURRENT matured pool - the same basis as
+                  the per-seat rows - growing each blind level toward the full pool. */}
+              {bountyRail.maturityPct < 100 && (
+                <span
+                  className="rounded-full border border-amber/25 bg-amber/[0.06] px-1 py-px text-[7px] tracking-[0.08em] text-amber/70"
+                  title={`$FP shown at the current ${bountyRail.maturityPct}% maturity; grows each blind level to ${bountyRail.potFp.toLocaleString(undefined, { maximumFractionDigits: 0 })} at 100%`}
+                >
+                  {bountyRail.maturityPct}% mat
+                </span>
+              )}
+            </span>
+            <span className="mt-1 inline-flex items-baseline gap-1.5">
+              <span className="inline-flex items-baseline gap-0.5 font-display text-[13px] tabular-nums text-gold">
+                {bountyRail.potFpMatured.toLocaleString(undefined, { maximumFractionDigits: 0 })}<TokenMark t="fp" size={10} />
+              </span>
+              <span className="inline-flex items-baseline gap-0.5 font-display text-[13px] tabular-nums text-emerald-400">
+                {(bountyRail.potSol * SOL_BOUNTY_BPS / 10_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<TokenMark t="sol" size={10} />
+              </span>
+            </span>
+          </div>
+          <div className="flex flex-col items-center leading-none">
+            <span className="whitespace-nowrap font-mono text-[8px] uppercase tracking-widest text-bone/45">ITM pool</span>
+            <span className="mt-1 inline-flex items-baseline gap-0.5 font-display text-[13px] tabular-nums text-emerald-400">
+              {(bountyRail.potSol * (10_000 - SOL_BOUNTY_BPS) / 10_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<TokenMark t="sol" size={10} />
+            </span>
+          </div>
+          <div className="flex flex-col items-end leading-none">
+            <span className="whitespace-nowrap font-mono text-[8px] uppercase tracking-widest text-bone/45">Buy-in</span>
+            <span className="mt-1 inline-flex items-baseline gap-0.5 font-display text-[13px] tabular-nums text-bone">
+              {bountyRail.buyInSol.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<TokenMark t="sol" size={10} />
+            </span>
+          </div>
+        </div>
+      )}
+      <NextBlindsTimer
+        tournamentStartTime={tournamentStartTime}
+        pausedAtTs={bountyRail?.duelPausedAtTs ?? null}
+      />
       <div className="px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Eyebrow>Standings</Eyebrow>
@@ -3532,10 +3841,53 @@ function SngStandings({ players, blinds, isCashGame, myPubkey, totalPlayers, itm
               </span>
               <span className={cn('flex-1 truncate', isHero ? 'text-gold' : 'text-bone/90')}>
                 {isHero ? 'You' : shortWallet(p.pubkey)}
+                {bountyRail?.duel && (p.seatIndex === bountyRail.duel.seatA || p.seatIndex === bountyRail.duel.seatB) && (
+                  <span className="ml-1 text-amber animate-pulse">&#9670;</span>
+                )}
               </span>
+              {bountyRail && (bountyRail.seatKo[p.seatIndex] ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 shrink-0" data-format="bounty">
+                  <span className="tabular-nums text-amber">{bountyUnitLabel(bountyRail.seatKo[p.seatIndex])}</span>
+                  <span className="inline-flex items-baseline gap-0.5 tabular-nums text-gold/90">
+                    {(bountyRail.seatFp[p.seatIndex] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}<TokenMark t="fp" size={9} />
+                  </span>
+                  <span className="inline-flex items-baseline gap-0.5 tabular-nums text-emerald-400/90">
+                    {(bountyRail.seatSol[p.seatIndex] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}<TokenMark t="sol" size={9} />
+                  </span>
+                </span>
+              )}
               {inTheMoney && <span className="font-mono text-[8px] tracking-[0.2em] text-gold/80">ITM</span>}
               {onBubble && <span className="font-mono text-[8px] tracking-[0.2em] text-orange/80">BUB</span>}
               <span className={cn('tabular-nums', isHero ? 'text-bone' : 'text-boneDim')}>{bb}bb</span>
+            </div>
+          );
+        })}
+        {busted.map(({ seat, lvl }) => {
+          const isHero = bountyRail?.heroSeat === seat;
+          const p = players.find(pl => pl.seatIndex === seat);
+          const pk = p?.pubkey && !p.pubkey.startsWith('seat-') ? p.pubkey : rememberedSeatPubkey(seat);
+          const name = isHero ? 'You' : pk ? shortWallet(pk) : `Seat ${seat + 1}`;
+          const ko = bountyRail?.seatKo[seat] ?? 0;
+          return (
+            <div key={`out-${seat}`} className={cn(
+              'flex items-center gap-2 px-1.5 py-[3px] rounded-sm font-mono text-[10px]',
+              isHero ? 'bg-gold/10 border border-gold/30 opacity-80' : 'opacity-45'
+            )} data-format="bounty">
+              <span className="w-5 font-bold text-boneDim/50">—</span>
+              <span className={cn('flex-1 truncate', isHero ? 'text-gold' : 'text-bone/80')}>{name}</span>
+              {ko > 0 && (
+                <span className="inline-flex items-center gap-1 shrink-0">
+                  <span className="tabular-nums text-amber">{bountyUnitLabel(ko)}</span>
+                  <span className="inline-flex items-baseline gap-0.5 tabular-nums text-gold/90">
+                    {(bountyRail?.seatFp[seat] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}<TokenMark t="fp" size={9} />
+                  </span>
+                  <span className="inline-flex items-baseline gap-0.5 tabular-nums text-emerald-400/90">
+                    {(bountyRail?.seatSol[seat] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}<TokenMark t="sol" size={9} />
+                  </span>
+                </span>
+              )}
+              {/* 1-based level display, matching the HUD (on-chain elimination_level is 0-based) */}
+              <span className="font-mono text-[8px] tracking-[0.15em] text-boneDim/60">OUT L{lvl + 1}</span>
             </div>
           );
         })}
@@ -3571,10 +3923,29 @@ function LogRow({ entry }: { entry: HandAction }) {
   );
 }
 
+/** Click-to-copy table address for the bounty rail header. */
+function CopyableTableId({ short, full }: { short: string; full: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        SFX.play('ui-tap');
+        navigator.clipboard?.writeText(full).catch(() => {});
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+      className={cn('font-mono text-[9px] truncate min-w-0 transition-colors', copied ? 'text-amber' : 'text-boneDim/60 hover:text-bone')}
+      title="Copy table address"
+    >
+      {copied ? 'copied ✓' : short}
+    </button>
+  );
+}
+
 function ActionLog({
   entries, handNumber, tablePda, pastHands, viewingPastHand, onHandNav,
   verifyUrl, handLogRef, sngPlayers, blinds, isCashGame, myPubkey,
-  totalPlayers, itmCount, tournamentStartTime, onCollapse,
+  totalPlayers, itmCount, tournamentStartTime, onCollapse, bountyRail,
 }: {
   entries: HandAction[];
   handNumber: number;
@@ -3593,6 +3964,7 @@ function ActionLog({
   totalPlayers?: number;
   itmCount?: number;
   tournamentStartTime?: number;
+  bountyRail?: BountyRailData;
 }) {
   const isViewingPast = viewingPastHand !== null;
   const viewedHand = isViewingPast ? (pastHands[viewingPastHand] || []) : entries;
@@ -3600,9 +3972,11 @@ function ActionLog({
   const tablePdaShort = tablePda ? `${tablePda.slice(0, 8)}…${tablePda.slice(-4)}` : '';
 
   return (
-    <div className="glass-room h-full flex flex-col">
+    // SnG Duels rail gets the mock's black card style; other tables keep the glass-room chrome.
+    <div className={cn('h-full flex flex-col', bountyRail ? 'rounded-xl border border-white/10 bg-black/40 overflow-hidden' : 'glass-room')}>
       <div className="px-3 py-2 hairline-b flex items-center justify-between gap-2">
-        <div className="flex flex-col gap-1 min-w-0">
+        {/* Compact one-line hand + table id on the bounty rail (was a stacked two-line block). */}
+        <div className={cn('min-w-0', bountyRail ? 'flex items-center gap-2 whitespace-nowrap' : 'flex flex-col gap-1')}>
           <div className="flex items-center gap-1.5">
             <Eyebrow>Hand</Eyebrow>
             <span className="font-display text-bone text-sm leading-none">
@@ -3611,7 +3985,9 @@ function ActionLog({
                 : (handNumber || 0)}
             </span>
           </div>
-          {tablePdaShort && <TxPill id={tablePdaShort} label="table" />}
+          {tablePdaShort && (bountyRail
+            ? <CopyableTableId short={tablePdaShort} full={tablePda} />
+            : <TxPill id={tablePdaShort} label="table" />)}
         </div>
         <div className="flex items-center gap-1 shrink-0 self-start">
           {totalPast > 0 && (
@@ -3666,10 +4042,30 @@ function ActionLog({
           totalPlayers={totalPlayers}
           itmCount={itmCount}
           tournamentStartTime={tournamentStartTime}
+          bountyRail={bountyRail}
         />
       )}
 
       <div ref={handLogRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 min-h-0">
+        {/* SnG Duels: live duel pinned as a system message at the top of the log. */}
+        {!isViewingPast && bountyRail?.duel && (() => {
+          const nameFor = (s: number) => {
+            const p = sngPlayers?.find((pl) => pl.seatIndex === s);
+            if (p) return p.pubkey === myPubkey ? 'You' : shortWallet(p.pubkey);
+            const pk = rememberedSeatPubkey(s);
+            return pk ? shortWallet(pk) : `Seat ${s}`;
+          };
+          return (
+            <div className="flex items-center gap-1.5 rounded-sm bg-amber/10 border border-amber/25 px-2 py-1 font-mono text-[10px]" data-format="bounty">
+              <span className="text-amber">&#9876;</span>
+              <span className="font-display uppercase tracking-wider text-amber">Duel</span>
+              <span className="text-bone/70 tabular-nums">R{bountyRail.duel.round}/3</span>
+              <span className="truncate text-bone/60">
+                {nameFor(bountyRail.duel.seatA)} vs {nameFor(bountyRail.duel.seatB)}
+              </span>
+            </div>
+          );
+        })()}
         {viewedHand.length === 0 ? (
           <div className="text-boneDim/30 font-mono text-[10px] text-center pt-4">No actions yet</div>
         ) : (
@@ -3956,7 +4352,7 @@ function BetPresetsEditor({ presets }: { presets: BetPreset[] }) {
 export default function PokerTable({
   tablePda, phase, pot, currentPlayer, communityCards, players,
   myCards, shownCards = {}, onShowCards, revealedThisHand = false, linkedSigners,
-  onAction, isMyTurn, blinds = { small: 5, big: 10 },
+  onAction, onDuelAction, bountyTeeConnection, isMyTurn, blinds = { small: 5, big: 10 },
   sessionClaimRequired = false, sessionClaimDebug = null, onClaimSeatSession,
   dealerSeat = 0, maxSeats = 2, handHistory = [], actionPending = false,
   showdownPot, showdownPayouts, tier = 0, prizePool = 0, maxPlayers = 2, currentPlayers = 0,
@@ -3994,6 +4390,129 @@ export default function PokerTable({
   // when isCashGame + tokenIsSol + showFiat are all true.
   const cardPrefsForFmt = useCardPrefs();
   const prices = usePrices();
+  // SnG Duels: one cached read of the sidecar for the whole table, mapped seat -> KO count for the
+  // per-seat badges. Null table (non-duel formats) short-circuits the fetch inside the hook.
+  const bountyDuelFormat = sngDuelsEnabled() && !isCashGame && (maxPlayers === 6 || maxPlayers === 9);
+  const { state: bountySeatState, pool: bountyPool, emissionRateBps } = useSngBountyState(
+    bountyDuelFormat ? tablePda : null,
+    5_000,
+    bountyTeeConnection,
+  );
+  const seatKoBySeat = useMemo(() => {
+    const m: Record<number, number> = {};
+    // Flat bounty 2026-07-14: tied winners split a point FRACTIONALLY (0.5 / 0.33),
+    // so the per-seat map carries the fraction, not the floor.
+    if (bountySeatState) for (const v of seatViews(bountySeatState)) m[v.seat] = v.points;
+    return m;
+  }, [bountySeatState]);
+  // Right-rail bounty data: pool/buy-in header + per-seat collected-bounty projections ($FP pure
+  // bounty by fp-weight share of the matured pool; SOL = the 50% bounty half by KO share).
+  const bountyRail = useMemo(() => {
+    if (!bountyDuelFormat) return undefined;
+    const emissionFormat = maxPlayers === 6 ? 1 : 2; // duel format is 6/9-max only (HU stays legacy)
+    // $FP pool truth: once the table is FUNDED, the on-chain snapshot (normal = gross minus the
+    // 10% grand skim) is the real pool - the client twin can't know the governor multiplier or
+    // idle boost. Unfunded: estimate = twin curve x the CURRENT governed rate. Twin-only last.
+    const twinFp = Number(calculateSngPoolUnrefined(emissionFormat, maxPlayers, BigInt(0), tier)) * 0.9 / 1_000_000;
+    const potFp = bountyPool?.grandFunded
+      ? Number(BigInt(bountyPool.normalUnrefined)) / 1_000_000
+      : emissionRateBps != null
+        ? twinFp * emissionRateBps / 10_000
+        : twinFp;
+    const potSol = (prizePool || 0) / 1e9;
+    const buyInSol = (TIERS[tier] ?? TIERS[0]).totalBuyIn / 1e9;
+    const seatFp: Record<number, number> = {};
+    const seatSol: Record<number, number> = {};
+    const seatEliminated: Record<number, number> = {}; // seat -> blind level busted at
+    let duel: { round: number; seatA: number; seatB: number } | null = null;
+    if (bountySeatState) {
+      const views = seatViews(bountySeatState);
+      for (const v of views) if (v.eliminated) seatEliminated[v.seat] = v.eliminationLevel ?? 0;
+      // Level-0 bust blind spot: a bust at blind level 0 stamps elimination_level=0, and
+      // full retention leaves burned=0, so the sidecar alone reads as "alive" (07-12
+      // audit finding). Cross-check the table: SNG pool games start full, so once the
+      // sidecar is seeded, any seat with no seated player is busted. Skip while the
+      // players list is empty (transient fetch) to avoid flashing everyone as busted.
+      // No `paid` gate: during the settling window (paid=true, winner still seated) the
+      // OUT rows must keep rendering - busted earners' points still pay (2026-07-14
+      // live find: standings showed 6/9 pts, three earned points invisible). Reset
+      // safety comes from seededCount going 0 and the players guard.
+      if ((bountySeatState.seededCount ?? 0) > 0 && players.length > 0) {
+        const seated = new Set(players.map((p) => p.seatIndex));
+        for (const v of views) {
+          if (!v.eliminated && v.seat < maxPlayers && !seated.has(v.seat)) {
+            seatEliminated[v.seat] = bountySeatState.eliminationLevel?.[v.seat] ?? 0;
+          }
+        }
+      }
+      const totalFp = views.reduce((a, v) => a + v.fpWeightUnits, 0n);
+      const totalKo = views.reduce((a, v) => a + v.koCreditUnits, 0n);
+      const mBps = bountySeatState.paid
+        ? duelMaturityBps(bountySeatState.finalBlindLevel)
+        : duelMaturityBps(blindLevel);
+      const maturedFp = potFp * mBps / 10_000;
+      const solBountyPool = potSol * SOL_BOUNTY_BPS / 10_000;
+      // Denominator, per ruleset - same rule as bountyBankView in lib/sng-duel-view.ts,
+      // keep in lockstep:
+      // - LEGACY: the game's KNOWN end-of-game credit total, not credits-so-far
+      //   (user report 2026-07-04 x2: "1 bounty = 0.27 SOL" - the whole pool - in the
+      //   standings rows). Every elimination credits exactly BOUNTY_UNIT and a game
+      //   has exactly maxPlayers-1 of them.
+      // - BOUNTY SHIELD (ruleset 1): points are conserved from seeding; the live
+      //   Sum(held units) IS the settlement denominator (burns concentrate value).
+      const shield = (bountySeatState.ruleset ?? 0) === 1;
+      const expectedUnits = Number(BOUNTY_UNIT) * Math.max(1, maxPlayers - 1);
+      const fpDenom = shield
+        ? Number(totalFp)
+        : bountySeatState.paid ? Number(totalFp) : Math.max(Number(totalFp), expectedUnits);
+      const koDenom = shield
+        ? Number(totalKo)
+        : bountySeatState.paid ? Number(totalKo) : Math.max(Number(totalKo), expectedUnits);
+      for (const v of views) {
+        if (fpDenom > 0) seatFp[v.seat] = maturedFp * Number(v.fpWeightUnits) / fpDenom;
+        if (koDenom > 0) seatSol[v.seat] = solBountyPool * Number(v.koCreditUnits) / koDenom;
+      }
+      if (bountySeatState.duelActive) {
+        duel = { round: bountySeatState.duelRound, seatA: bountySeatState.duelSeatA, seatB: bountySeatState.duelSeatB };
+      }
+    }
+    // Header consistency (user report 2026-07-17): the pool header must count maturity
+    // exactly like the per-seat rows do, or the header promises the 100%-maturity pool
+    // while the rows sum to the matured fraction (60 vs 6x2.5 on a fresh level-0 game).
+    const railMBps = bountySeatState?.paid
+      ? duelMaturityBps(bountySeatState.finalBlindLevel)
+      : duelMaturityBps(blindLevel);
+    return {
+      potFp, potSol, buyInSol,
+      potFpMatured: potFp * railMBps / 10_000,
+      maturityPct: Math.min(100, Math.round(railMBps / 100)),
+      potFpFunded: !!bountyPool?.grandFunded,
+      emissionRateBps: emissionRateBps ?? null,
+      seatKo: seatKoBySeat, seatFp, seatSol, seatEliminated, duel,
+      // Flat Bounty: downstream surfaces use this for standings and duel overlay labels.
+      ruleset: bountySeatState?.ruleset ?? 0,
+      duelPausedAtTs: bountySeatState ? Number(bountySeatState.duelPauseStartedTs) || null : null,
+    };
+  }, [bountyDuelFormat, bountySeatState, bountyPool, emissionRateBps, seatKoBySeat, maxPlayers, tier, prizePool, blindLevel, players]);
+  // End-screen snapshot: the sidecar is RESET to zeros at settlement (table reuse) and the SOL pool
+  // drains at distribution, so the game-end breakdown must latch the last LIVE reading (KOs present
+  // and pool still funded) - reading at end-time shows a winner with "0 knockouts".
+  const bountyEndSnapRef = useRef<{ rail: NonNullable<typeof bountyRail>; maturityPct: number } | null>(null);
+  useEffect(() => {
+    if (!bountyRail) return;
+    const hasKo = Object.values(bountyRail.seatKo).some((k) => k > 0);
+    if (hasKo && bountyRail.potSol > 0) {
+      const lvl = bountySeatState?.paid ? bountySeatState.finalBlindLevel : blindLevel;
+      bountyEndSnapRef.current = {
+        rail: bountyRail,
+        maturityPct: Math.min(100, Math.round(duelMaturityBps(lvl) / 100)),
+      };
+    }
+  }, [bountyRail, bountySeatState, blindLevel]);
+  // Feed the module-level sticky seat memory (see rememberSeatPubkeys above).
+  useEffect(() => {
+    rememberSeatPubkeys(tablePda, players);
+  }, [tablePda, players]);
   const tokenIsSol = !tokenMint || tokenMint === '11111111111111111111111111111111';
   const fmtUsdRate = isCashGame && tokenIsSol && cardPrefsForFmt.showFiat && prices.solPrice > 0
     ? prices.solPrice
@@ -4048,8 +4567,14 @@ export default function PokerTable({
     const isItm = !isWinner && heroPlace <= itmCount;
     const payoutsBps = PAYOUT_BPS[snapMax] || PAYOUT_BPS[2];
     const emissionFormat = snapMax === 2 ? 0 : snapMax === 6 ? 1 : 2;
-    const pokerPoolRaw =
+    // Prefer the FUNDED on-chain pool (jackpot snapshot / latched bounty rail) over the client
+    // twin: the twin can't know the governor multiplier, so it overstates on governed tables.
+    const twinPool =
       Number(calculateSngPoolUnrefined(emissionFormat, snapMax, BigInt(0), endSnapshot.tier)) * 0.9 / 1_000_000;
+    const fundedPool = bountyPool?.grandFunded
+      ? Number(BigInt(bountyPool.normalUnrefined)) / 1_000_000
+      : bountyEndSnapRef.current?.rail.potFp ?? null;
+    const pokerPoolRaw = bountyDuelFormat && fundedPool != null ? fundedPool : twinPool;
     const heroBps = payoutsBps[heroPlace - 1] || 0;
     const projectedPoker = Math.round(pokerPoolRaw * heroBps / 10000);
     // SOL prize for this place. HU pays 1st only; 6-max pays 1/2 (65/35);
@@ -4071,7 +4596,7 @@ export default function PokerTable({
         solPool: prizePool / 1e9,
       },
     };
-  }, [isCashGame, endSnapshot, myPubkeyStr, prizePool]);
+  }, [isCashGame, endSnapshot, myPubkeyStr, prizePool, bountyDuelFormat, bountyPool]);
 
   // Distribution status + live raw $FP balance for the refine actions. Holds
   // "distributing" until this game's $FP credit lands on the Unrefined PDA,
@@ -4145,6 +4670,46 @@ export default function PokerTable({
     await refreshRaw();
   }, [publicKey, sendTransaction, claimConn, refreshRaw]);
   const myPlayer = players.find(p => p.pubkey === myPubkeyStr);
+
+  // SnG Duels juice: pop + sound when the hero's KO count rises (a bounty was earned). Baselines on
+  // first sidecar load so pre-existing KOs don't false-trigger; only genuine increases celebrate.
+  // Latched hero seat: after busting, myPlayer drops out of `players`, but the hero must keep
+  // seeing their Bounty Bank / standings row ("watch along"). Latch the last known seat.
+  // Persisted per tab (#24): a reload after busting would otherwise lose the latch and
+  // zero the hero's Bounty Bank while their standings row still shows held points.
+  const heroSeatLive = typeof myPlayer?.seatIndex === 'number' && myPlayer.seatIndex >= 0 ? myPlayer.seatIndex : null;
+  const heroSeatLatchedRef = useRef<number | null>(null);
+  if (heroSeatLatchedRef.current == null && heroSeatLive == null && myPubkeyStr && typeof window !== 'undefined') {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(`fp.heroseat.${tablePda}`) ?? 'null');
+      // Wallet-scoped: never adopt a seat latched by a different signer (table reuse).
+      if (stored && stored.w === myPubkeyStr && typeof stored.s === 'number') {
+        heroSeatLatchedRef.current = stored.s;
+      }
+    } catch { /* blocked/corrupt storage - latch stays memory-only */ }
+  }
+  if (heroSeatLive != null && heroSeatLatchedRef.current !== heroSeatLive) {
+    heroSeatLatchedRef.current = heroSeatLive;
+    try { sessionStorage.setItem(`fp.heroseat.${tablePda}`, JSON.stringify({ w: myPubkeyStr, s: heroSeatLive })); } catch {}
+  }
+  const bountyHeroSeat = heroSeatLive ?? heroSeatLatchedRef.current;
+  const heroKoNow = bountyHeroSeat != null ? (seatKoBySeat[bountyHeroSeat] ?? 0) : 0;
+  const prevHeroKoRef = useRef<number | null>(null);
+  const [koFlash, setKoFlash] = useState<number | null>(null);
+  useEffect(() => {
+    if (!bountySeatState) return;
+    const prev = prevHeroKoRef.current;
+    if (prev != null && heroKoNow > prev) {
+      setKoFlash(heroKoNow);
+      try { SFX.play('tourney-win'); } catch {}
+    }
+    prevHeroKoRef.current = heroKoNow;
+  }, [heroKoNow, bountySeatState]);
+  useEffect(() => {
+    if (koFlash == null) return;
+    const t = setTimeout(() => setKoFlash(null), 3200); // long enough to actually read it
+    return () => clearTimeout(t);
+  }, [koFlash]);
 
   // Anchor the table's viewing perspective to the hero's seat. When the hero
   // busts out of an SNG they're removed from `players`, so myPlayer goes
@@ -4369,22 +4934,59 @@ export default function PokerTable({
   // right after the river. Normal check-down showdowns (cards first appear AT
   // showdown) keep the staged flip. Reset per hand.
   const preShowdownRevealedRef = useRef<{ handNumber: number; set: Set<number> }>({ handNumber: 0, set: new Set() });
+  // Ghost seats for the run-out ceremony (user report 2026-07-17): when a duel/all-in
+  // busts a player, the chain vacates their seat (and the sidecar marks it eliminated)
+  // while the staged run-out is still playing - the busted player's cards vanished
+  // mid-ceremony and only the winner's hand stayed up. Snapshot the full player object
+  // for any seat with revealed cards; the render loop keeps it on the felt while the
+  // showdown ceremony is active, then lets the seat go BUSTED at the next deal.
+  const revealedSeatGhostRef = useRef<{ handNumber: number; map: Map<number, Player> }>({ handNumber: 0, map: new Map() });
   useEffect(() => {
     if (revealedHoleCardsRef.current.handNumber !== handNumber) {
       revealedHoleCardsRef.current = { handNumber, map: new Map() };
     }
+    if (revealedSeatGhostRef.current.handNumber !== handNumber) {
+      revealedSeatGhostRef.current = { handNumber, map: new Map() };
+    }
     if (preShowdownRevealedRef.current.handNumber !== handNumber) {
       preShowdownRevealedRef.current = { handNumber, set: new Set() };
     }
+    // DUEL showdown (live finding 2026-07-03): duels run BETWEEN hands, so handNumber does
+    // not advance and this sticky cache still holds EVERY seat's cards from the previous
+    // hand's showdown - the whole table looked like it was in the duel. While a duel is
+    // active, only the two duelists may show cards; purge everyone else's stale reveals.
+    if (bountySeatState?.duelActive) {
+      const a = bountySeatState.duelSeatA;
+      const b = bountySeatState.duelSeatB;
+      for (const seat of Array.from(revealedHoleCardsRef.current.map.keys())) {
+        if (seat !== a && seat !== b) revealedHoleCardsRef.current.map.delete(seat);
+      }
+      for (const seat of Array.from(preShowdownRevealedRef.current.set)) {
+        if (seat !== a && seat !== b) preShowdownRevealedRef.current.set.delete(seat);
+      }
+      for (const seat of Array.from(revealedSeatGhostRef.current.map.keys())) {
+        if (seat !== a && seat !== b) revealedSeatGhostRef.current.map.delete(seat);
+      }
+    }
     for (const p of players) {
       if (!p || !p.holeCards) continue;
+      // Same duel rule for LIVE state: the contract only clears revealed cards at the next
+      // deal, so non-duelists still stream face-up cards during the between-hands duel.
+      if (
+        bountySeatState?.duelActive &&
+        p.seatIndex !== bountySeatState.duelSeatA &&
+        p.seatIndex !== bountySeatState.duelSeatB
+      ) {
+        continue;
+      }
       const [c0, c1] = p.holeCards;
       if (c0 !== 255 && c1 !== 255 && c0 <= 51 && c1 <= 51) {
         revealedHoleCardsRef.current.map.set(p.seatIndex, [c0, c1]);
+        revealedSeatGhostRef.current.map.set(p.seatIndex, { ...p, holeCards: [c0, c1] });
         if (!isShowdown) preShowdownRevealedRef.current.set.add(p.seatIndex);
       }
     }
-  }, [handNumber, players, isShowdown]);
+  }, [handNumber, players, isShowdown, bountySeatState?.duelActive, bountySeatState?.duelSeatA, bountySeatState?.duelSeatB]);
 
   // Latch seats that folded during LIVE betting this hand. The contract resets
   // seats_folded during showdown AND every street's *RevealPending commit, so a
@@ -4592,6 +5194,16 @@ export default function PokerTable({
       preShowdownHandRef.current = handNumber;
       preShowdownBoardCountRef.current = 0;
     }
+    // Sub-hand deal boundary (#6): a duel showdown re-deals the felt WITHOUT a
+    // hand-number change, passing through Waiting/Starting/PreFlop (where the
+    // board buffer clears). Without this reset the ref stays at the MAIN hand's
+    // count (usually 5), the staging gate sees priorCount=5, and the duel's own
+    // run-out bursts 0->5 unpaced (seen in the 07-12 pacing capture, hand 227).
+    // A genuine all-in run-out never revisits these phases, so this can't fire
+    // mid-ceremony.
+    if (phase === 'Waiting' || phase === 'Starting' || phase === 'PreFlop') {
+      preShowdownBoardCountRef.current = 0;
+    }
     // Keep following the board while betting can STILL happen — i.e. ≥2 players
     // are live (not folded, not all-in). The run-out lock is "≤1 player can act",
     // NOT "anyone is all-in": a single short-stack all-in with others still
@@ -4734,14 +5346,33 @@ export default function PokerTable({
   const inShowdownWindow = isShowdownRaw || (isRevealPending && runoutLiveBettors <= 1);
   const [showdownClockArmed, setShowdownClockArmed] = useState(false);
   const showdownClockHandRef = useRef(-1);
+  // True when the NEXT ceremony is a sub-hand re-deal (duel showdown on the same
+  // hand number). Those play against the crank's short duel-showdown hold (~1s +
+  // transition), so the ceremony must use compact beats or the river stage lands
+  // after the felt has already been wiped (game-6 capture: duel board stopped at
+  // the turn). Cleared on every real hand change.
+  const subHandDealRef = useRef(false);
   useEffect(() => {
     if (handNumber !== showdownClockHandRef.current) {
       showdownClockHandRef.current = handNumber;
       setShowdownClockArmed(false);
       setShowdownStage(0);
+      subHandDealRef.current = false;
+    }
+    // Sub-hand deal boundary (#6): duel showdowns re-deal on the SAME hand
+    // number, so the per-hand latch must also reset when a new deal starts
+    // (Waiting/Starting/PreFlop, where the board buffer clears). Otherwise the
+    // duel's run-out inherits stage 5 from the main hand's ceremony and reveals
+    // its whole board at once. A real run-out never passes through these
+    // phases, so the mid-run-out flap protection (plain Flop/Turn/River) holds.
+    if (!inShowdownWindow && showdownClockArmed
+      && (phase === 'Waiting' || phase === 'Starting' || phase === 'PreFlop')) {
+      setShowdownClockArmed(false);
+      setShowdownStage(0);
+      subHandDealRef.current = true;
     }
     if (inShowdownWindow && !showdownClockArmed) setShowdownClockArmed(true);
-  }, [handNumber, inShowdownWindow, showdownClockArmed]);
+  }, [handNumber, inShowdownWindow, showdownClockArmed, phase]);
 
   useEffect(() => {
     // CRITICAL: deps must be STABLE primitives only (showdownClockArmed).
@@ -4768,9 +5399,15 @@ export default function PokerTable({
       // already has a complete board revealed at once, so its stages only drive
       // the winner pulse — keep that snappy.
       const runout = preShowdownBoardCountRef.current < 5;
-      const D = runout
-        ? { flip: 250, flop: 1300, turn: 2600, river: 3900, win: 4600 }
-        : { flip: 250, flop: 650, turn: 1050, river: 1450, win: 1900 };
+      // Sub-hand (duel) showdowns get COMPACT runout beats: the crank only holds a
+      // duel showdown ~1s + transition before wiping the felt, so the standard
+      // 3.9s river beat never rendered (#6, game-6 capture). ~2.1s fits the window
+      // while still landing the streets one at a time.
+      const D = subHandDealRef.current
+        ? { flip: 200, flop: 700, turn: 1400, river: 2100, win: 2600 }
+        : runout
+          ? { flip: 250, flop: 1300, turn: 2600, river: 3900, win: 4600 }
+          : { flip: 250, flop: 650, turn: 1050, river: 1450, win: 1900 };
       const t1 = setTimeout(() => { log('showdown.stage=1 (cards flip)'); setShowdownStage(1); }, D.flip);
       const t2 = setTimeout(() => { log('showdown.stage=2 (flop)'); setShowdownStage(2); }, D.flop);
       const t3 = setTimeout(() => { log('showdown.stage=3 (turn)'); setShowdownStage(3); }, D.turn);
@@ -4859,8 +5496,14 @@ export default function PokerTable({
     // never freezes partial), fall through to pace the reveal via showdownStage.
     // Otherwise (check-down board already complete, fold-win, or the
     // LEAVING-collapse blank-board case) reveal all 5.
+    // showdownClockArmed flips in an EFFECT, i.e. one render AFTER the first
+    // showdown frame - so a hand that jumps straight to Showdown with a full
+    // board (duel showdowns: phase can go Flop->Showdown at community 3/5, or
+    // deal fresh 0->5 in one commit) used to burst all 5 cards on that first
+    // frame, then re-cap when the clock armed (#6 run-out pacing). Also accept
+    // the render-computed inShowdownWindow so the very first frame stages too.
     if (isShowdown && bufferedCommunityCards.filter(validBoardCard).length >= 5
-      && !(priorCount < 5 && contesting >= 2 && showdownClockArmed)) {
+      && !(priorCount < 5 && contesting >= 2 && (showdownClockArmed || inShowdownWindow))) {
       return [...bufferedCommunityCards];
     }
     const revealCount =
@@ -4871,7 +5514,7 @@ export default function PokerTable({
       priorCount;
     const visibleCount = Math.max(priorCount, revealCount);
     return bufferedCommunityCards.map((card, idx) => (idx < visibleCount ? card : 255));
-  }, [isShowdown, isRevealPending, showdownStage, bufferedCommunityCards, players, showdownClockArmed]);
+  }, [isShowdown, isRevealPending, showdownStage, bufferedCommunityCards, players, showdownClockArmed, inShowdownWindow]);
 
   // FLOP / TURN / RIVER banner, driven off the STAGED board count (the same
   // paced reveal the felt shows), NOT the raw buffered board. On an all-in the
@@ -4894,6 +5537,10 @@ export default function PokerTable({
     }
     if (count <= lastStreetBannerCountRef.current) return; // this street already announced
     lastStreetBannerCountRef.current = count;
+    // #6 per-card reveal instrumentation: one event per STAGED street landing, so the
+    // timeline can prove the paced reveal (vs a raw 0->5 burst, which would edge-fire
+    // a single count=5 event with no flop/turn before it).
+    fpEvent('board.street', { count, paced: showdownClockArmed || isRevealPending });
     setStreetBanner(count >= 5 ? 'RIVER' : count === 4 ? 'TURN' : 'FLOP');
     if (streetBannerTimerRef.current) clearTimeout(streetBannerTimerRef.current);
     streetBannerTimerRef.current = setTimeout(() => setStreetBanner(null), 2500);
@@ -5203,9 +5850,16 @@ export default function PokerTable({
     SidePots: 'ALL-IN', BigPot: 'RIVER',
     FlopRevealPending: 'FLOP', TurnRevealPending: 'TURN', RiverRevealPending: 'RIVER',
   };
+  // Reused SNG tables carry the PREVIOUS game's small/big blind on-chain until the next
+  // start_game stamps tournamentStartTime. Pre-start, show the schedule's first level
+  // instead of ghost blinds ("BLINDS 200/400 -> 15/30 at LEVEL 1" + every stack reading
+  // "4bb" at 100bb - live finding 2026-07-03).
+  const displayBlinds = (!isCashGame && !tournamentStartTime)
+    ? { small: SNG_BLIND_LEVELS[0][0], big: SNG_BLIND_LEVELS[0][1] }
+    : blinds;
   const blindsDisplay = isCashGame
     ? `${fmtVal(blinds.small)}/${fmtVal(blinds.big)} ${getTokenSymbol(tokenMint)}`
-    : `${blinds.small}/${blinds.big}`;
+    : `${displayBlinds.small}/${displayBlinds.big}`;
   // Leaving players are exiting and won't be dealt into the next hand, so they
   // must not count toward "is the table ready to deal". Otherwise a table with
   // one real player plus several Leaving seats wrongly reads "WAITING FOR DEALER"
@@ -5237,11 +5891,12 @@ export default function PokerTable({
   const itmCount = maxPlayers <= 2 ? 1 : maxPlayers <= 6 ? 2 : 3;
 
   return (
-    <div id="poker-table-root" className={cn("relative w-full max-w-[1440px] mx-auto px-0 md:px-5 pb-2 bg-ink grid grid-cols-1 gap-0 md:gap-4 md:h-[calc(100dvh-104px)] [@media(min-width:768px)_and_(max-height:500px)_and_(orientation:landscape)]:h-[calc(100dvh-60px)] md:min-h-0 md:overflow-hidden [@media(max-height:500px)_and_(orientation:landscape)]:h-[calc(100dvh-56px)] [@media(max-height:500px)_and_(orientation:landscape)]:min-h-0 [@media(max-height:500px)_and_(orientation:landscape)]:overflow-y-auto [@media(max-height:500px)_and_(orientation:landscape)]:overflow-x-hidden",
+    <div id="poker-table-root" data-bounty-table={bountyDuelFormat ? '' : undefined} className={cn("relative w-full max-w-[1440px] mx-auto px-0 md:px-5 pb-2 bg-ink grid grid-cols-1 gap-0 md:gap-4 md:h-[calc(100dvh-104px)] [@media(min-width:768px)_and_(max-height:500px)_and_(orientation:landscape)]:h-[calc(100dvh-60px)] md:min-h-0 md:overflow-hidden [@media(max-height:500px)_and_(orientation:landscape)]:h-[calc(100dvh-56px)] [@media(max-height:500px)_and_(orientation:landscape)]:min-h-0 [@media(max-height:500px)_and_(orientation:landscape)]:overflow-y-auto [@media(max-height:500px)_and_(orientation:landscape)]:overflow-x-hidden",
       railOpen ? "md:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_300px]" : "md:grid-cols-[minmax(0,1fr)_36px]")}>
       {/* ─── Left column: felt + cockpit + controls ──────────────────── */}
-      <div className={cn(
-        'flex flex-col gap-2 md:gap-3 md:min-h-0 md:h-full',
+      <div
+        className={cn(
+        'relative flex flex-col gap-2 md:gap-3 md:min-h-0 md:h-full',
         '[@media(max-height:500px)_and_(orientation:landscape)]:gap-1',
         // The HeroCockpit is now hidden on every viewport (cards moved into the
         // action bar), so its grid track is gone — only felt + controls remain.
@@ -5255,7 +5910,12 @@ export default function PokerTable({
 
         {/* SNG status strip — 3-col: tier+buy-in · live stats · pool columns */}
         {!isCashGame && tier !== undefined && (() => {
-          const aliveSng = players.filter(p => p.isActive || p.isSittingOut);
+          // TOURNAMENT alive count, not hand participation (HUD showed 4/6 vs standings
+          // 5/6 because hand-folded players were dropped - live finding 2026-07-04).
+          // Unlike the standings prop, THIS players array still contains busted seats:
+          // busted = zero chips AND inactive; a folded player keeps chips, an all-in
+          // player keeps isActive, a sit-out keeps isSittingOut.
+          const aliveSng = players.filter(p => (p.chips ?? 0) > 0 || p.isActive || p.isSittingOut);
           const sortedAlive = [...aliveSng].sort((a, b) => b.chips - a.chips);
           const playersLeft = sortedAlive.length || seatedCount;
           const totalPlayers = maxPlayers;
@@ -5288,6 +5948,25 @@ export default function PokerTable({
           const heroBps = payoutsBps[heroPlace - 1] || 0;
           const heroProj = Math.round(pokerPool * heroBps / 10000);
           const avgBb = blinds.big > 0 ? Math.round(avgStack / blinds.big) : 0;
+          // SnG Duels: replace the tier/buy-in strip with the non-invasive bounty HUD (tier · blinds ·
+          // players · collected bounty · maturity). Buy-in/pool/standings move to the right-rail action bar.
+          if (sngDuelsEnabled() && (maxPlayers === 6 || maxPlayers === 9)) {
+            const nxt = SNG_BLIND_LEVELS[blindLevel + 1];
+            return (
+              <BountyHudBar
+                table={tablePda}
+                heroSeat={bountyHeroSeat}
+                tierName={TIER_NAMES[tier] || 'Copper'}
+                level={blindLevel}
+                curBlinds={displayBlinds}
+                nextBlinds={nxt ? { small: nxt[0], big: nxt[1] } : null}
+                playersLeft={playersLeft}
+                totalPlayers={totalPlayers}
+                pokerPoolUnrefined={BigInt(Math.max(0, Math.round((bountyRail?.potFp ?? pokerPool ?? 0) * 1_000_000)))}
+                solPrizePoolLamports={BigInt(Math.max(0, Math.round(prizePool || 0)))}
+              />
+            );
+          }
           return (
             <div
               className="flex flex-col md:grid md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-1 md:gap-4 px-3 md:px-4 py-1 md:py-2 glass-sub hairline"
@@ -5345,6 +6024,16 @@ export default function PokerTable({
                   </div>
                 )}
               </div>
+              {sngDuelsEnabled() && (maxPlayers === 6 || maxPlayers === 9) && (
+                <BountyDuelHud
+                  table={tablePda}
+                  heroSeat={bountyHeroSeat}
+                  currentBlindLevel={blindLevel}
+                  pokerPoolUnrefined={BigInt(Math.max(0, Math.round((bountyRail?.potFp ?? pokerPool ?? 0) * 1_000_000)))}
+                  solPrizePoolLamports={BigInt(Math.max(0, Math.round(prizePool || 0)))}
+                  className="shrink-0"
+                />
+              )}
               {/* Mobile section divider (desktop's 3-zone grid separates these). */}
               <div className="md:hidden h-px w-full bg-gold/10" />
               {/* Right: pool columns */}
@@ -5386,8 +6075,51 @@ export default function PokerTable({
           );
         })()}
 
+        {koFlash != null && (
+          // absolute (not fixed): centers on the table column, which excludes the right rail.
+          <div className="pointer-events-none absolute inset-0 z-[75] flex items-center justify-center" data-format="bounty">
+            <div className="animate-in zoom-in-50 fade-in duration-500 flex flex-col items-center gap-2">
+              <div className="font-display text-4xl sm:text-6xl md:text-7xl tracking-[0.16em] text-transparent bg-clip-text bg-gradient-to-b from-amber via-gold to-orange drop-shadow-[0_0_34px_rgba(255,198,58,0.55)]">
+                {/* Flat bounty: points move only on knockouts (hand or duel bust), so the
+                    burst is the bounty capture moment; tied splits burst too (fractional). */}
+                {(bountyRail?.ruleset ?? 0) === 1 ? 'POINT TAKEN' : 'KNOCKOUT'}
+              </div>
+              <div className="rounded-full border border-amber/40 bg-black/75 px-4 py-1.5 font-display text-lg uppercase tracking-[0.2em] text-amber shadow-2xl">
+                {(bountyRail?.ruleset ?? 0) === 1 ? 'Bounty point banked' : 'Bounty banked'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Glass-room containing the felt */}
-        <div className="glass-room flex flex-col md:min-h-0 md:h-full">
+        <div className="glass-room relative flex flex-col md:min-h-0 md:h-full">
+          {/* Duel overlay: absolute-centered over the felt (this container excludes the right rail),
+              and hidden the instant community cards land so it never covers the board. */}
+          {sngDuelsEnabled() && !isCashGame && (maxPlayers === 6 || maxPlayers === 9) && (
+            <DuelOverlay
+              // COMPACT, not unmounted, while board cards are up: unmounting here killed the
+              // resolve linger (the min-dwell timer lives inside the overlay), which the
+              // [FP-EVT] timeline caught as overlay_shown-without-overlay_hidden. The compact
+              // banner keeps the duel readable during its own run-out without covering the board.
+              compact={(communityCards ?? []).some((c) => c !== 255 && c >= 0 && c <= 51)}
+              table={tablePda}
+              heroPubkey={myPubkeyStr}
+              seatPubkey={(s) => players.find((pl) => pl.seatIndex === s)?.pubkey ?? null}
+              seatName={(s) => {
+                const p = players.find((pl) => pl.seatIndex === s);
+                const key = p?.pubkey ?? rememberedSeatPubkey(s);
+                return (key && profiles[key]?.username) || (key ? shortWallet(key) : `Seat ${s}`);
+              }}
+              onAction={onDuelAction
+                ? (a, seatA, seatB) => onDuelAction(a, seatA, seatB)
+                : undefined}
+              // Flat Bounty stake context.
+              alivePlayers={players.filter((p) => p.pubkey && !p.pubkey.startsWith('seat-')).length}
+              blindLevel={blindLevel}
+              smallBlind={blinds.small}
+              bigBlind={blinds.big}
+            />
+          )}
           {/* Table info bar */}
           <div className="relative z-30 h-[42px] px-2 sm:px-3 md:px-4 hairline-b flex flex-nowrap items-center gap-2 md:gap-3 overflow-visible">
             <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0 shrink-0 max-w-[48%] sm:max-w-[52%] lg:max-w-none overflow-hidden whitespace-nowrap">
@@ -5530,12 +6262,17 @@ export default function PokerTable({
                 </button>
               )}
 
-              <div className="hidden 2xl:block h-4 w-px bg-orange/15 shrink-0" />
-              <div className="hidden 2xl:flex shrink-0 items-center gap-1.5" title="TEE connection status">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber animate-pulse" />
-                <span className="hidden lg:inline font-mono text-[10px] text-boneDim tracking-wider">TEE</span>
-                <span className="hidden sm:inline font-mono text-[10px] text-emerald-300">ok</span>
-              </div>
+              {/* Duel tables: the rail's verify footer already shows "VRF · TEE ok"; one is enough. */}
+              {!bountyDuelFormat && (
+                <>
+                  <div className="hidden 2xl:block h-4 w-px bg-orange/15 shrink-0" />
+                  <div className="hidden 2xl:flex shrink-0 items-center gap-1.5" title="TEE connection status">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber animate-pulse" />
+                    <span className="hidden lg:inline font-mono text-[10px] text-boneDim tracking-wider">TEE</span>
+                    <span className="hidden sm:inline font-mono text-[10px] text-emerald-300">ok</span>
+                  </div>
+                </>
+              )}
               {/* Mobile chat now lives on the nav chat bubble (#nav-landscape-chat-btn
                   in Navbar.tsx, portrait + landscape). The old in-bar CHAT button
                   was a redundant second entry point and has been removed. */}
@@ -5802,6 +6539,11 @@ export default function PokerTable({
                         scales with the felt and never crashes seats / opponent
                         chips on heads-up. Mockup 1.4 chip style preserved. */}
                     {(() => {
+                      // DuelOverlay owns the felt while a duel is active. Rendering the
+                      // normal phase status at the same time lets inter-hand Waiting text
+                      // cut through the duel/tiebreak header on wide layouts.
+                      if (bountySeatState?.duelActive) return null;
+
                       const nonFoldedCount = players.filter(p => !p.folded && p.isActive && !p.waitingForBb).length;
                       // A fold-win means the pot was uncontested — no hands shown.
                       // This used to FALSELY trip after an all-in SHOWDOWN whose
@@ -5982,16 +6724,39 @@ export default function PokerTable({
                 const i = (visualIdx + heroSeatIdx) % maxSeats;
                 const seatMap = new Map<number, Player>();
                 players.forEach(p => { if (p) seatMap.set(p.seatIndex, p); });
+                // Run-out ghost: a seat busted by THIS showdown (duel or all-in) stays on the
+                // felt with its revealed cards until the ceremony ends - the chain vacates the
+                // seat and the sidecar stamps it eliminated before the staged board finishes,
+                // which dropped the busted duelist's hand mid-run-out (only the winner's cards
+                // survived). Ceremony window = the same latch that paces the board.
+                const ceremonyGhost = (showdownClockArmed || inShowdownWindow)
+                  ? revealedSeatGhostRef.current.map.get(i)
+                  : undefined;
                 // Eliminated seats (durable) always render empty/BUSTED — see
                 // eliminatedSeatSet above (kills the end-game "ghosts reappear"
-                // artifact during SNG teardown).
-                const rawP = eliminatedSeatSet?.has(i) ? null : (seatMap.get(i) || null);
+                // artifact during SNG teardown) — EXCEPT while their bust's own
+                // ceremony is still playing (ghost above; it expires with the
+                // ceremony latch, so teardown behavior is unchanged after it).
+                const rawP = eliminatedSeatSet?.has(i)
+                  ? (ceremonyGhost ?? null)
+                  : (seatMap.get(i) ?? ceremonyGhost ?? null);
                 // Backfill from sticky cache: contract clears revealedHands on
                 // every phase transition during an all-in runout, which made
                 // opponent cards flicker visible/hidden each street. Once we
                 // see valid cards in-hand, keep showing them.
                 const p = (() => {
                   if (!rawP) return rawP;
+                  // DUEL rule (2026-07-03): between-hands duel showdowns must show cards at
+                  // the TWO duelist seats only. Everyone else's cards - stale reveals from
+                  // the finished hand, still valid in live state until the next deal - are
+                  // force-hidden, or the whole table reads as "in the duel".
+                  if (
+                    bountySeatState?.duelActive &&
+                    rawP.seatIndex !== bountySeatState.duelSeatA &&
+                    rawP.seatIndex !== bountySeatState.duelSeatB
+                  ) {
+                    return { ...rawP, holeCards: [255, 255] as [number, number] };
+                  }
                   const stick = revealedHoleCardsRef.current.map.get(rawP.seatIndex);
                   const liveCards = rawP.holeCards;
                   const liveInvalid = !liveCards || liveCards[0] === 255 || liveCards[1] === 255;
@@ -6067,6 +6832,13 @@ export default function PokerTable({
                     pos={pos}
                     isCurrent={i === currentPlayer}
                     seatIndex={i}
+                    koCount={seatKoBySeat[i] ?? 0}
+                    bankedFp={bountyRail?.seatFp?.[i] ?? 0}
+                    bankedSol={bountyRail?.seatSol?.[i] ?? 0}
+                    duelSeat={!!bountyRail?.duel && (i === bountyRail.duel.seatA || i === bountyRail.duel.seatB)}
+                    duelReveal={!!bountySeatState && bountySeatState.duelChoiceA !== 0 && bountySeatState.duelChoiceB !== 0}
+                    duelLiveOnFelt={!!bountyRail?.duel}
+                    shieldMode={(bountyRail?.ruleset ?? 0) === 1}
                     isCashGame={isCashGame}
                     isHero={!!isHero}
                     heroCardsOnFelt={effectiveHeroPosition === 'table'}
@@ -6293,7 +7065,51 @@ export default function PokerTable({
               tournamentOver={endSnapshot.tournamentOver}
               tierName={tierName}
               playerName={playerLabel}
-              payout={{ poker: projectedPoker, sol: projectedSol }}
+              // Duel mode economics: $FP is PURE bounty (no place-based $FP payout - it shows in the
+              // bounty breakdown instead), and only the non-bounty half of the SOL pool pays ITM.
+              // The legacy projection splits 100% of the SOL pool by place, which would read double.
+              payout={bountyRail
+                ? { poker: 0, sol: projectedSol * (10_000 - SOL_BOUNTY_BPS) / 10_000 }
+                : { poker: projectedPoker, sol: projectedSol }}
+              bounty={(() => {
+                if (!bountyDuelFormat || bountyHeroSeat == null) return undefined;
+                // The sidecar resets to zeros at settlement, so prefer the latched live snapshot;
+                // only fall back to the live rail if it still carries data (e.g. hero busted early
+                // while the game continues).
+                const liveHasKo = bountyRail && Object.values(bountyRail.seatKo).some((k) => k > 0);
+                const snap = bountyEndSnapRef.current;
+                const rail = liveHasKo ? bountyRail : snap?.rail ?? bountyRail;
+                if (!rail) return undefined;
+                const maturityPct = liveHasKo || !snap
+                  ? Math.min(100, Math.round(duelMaturityBps(
+                      bountySeatState?.paid ? bountySeatState.finalBlindLevel : blindLevel,
+                    ) / 100))
+                  : snap.maturityPct;
+                return {
+                  koCount: rail.seatKo[bountyHeroSeat] ?? 0,
+                  fpBounty: rail.seatFp[bountyHeroSeat] ?? 0,
+                  solBounty: rail.seatSol[bountyHeroSeat] ?? 0,
+                  maturityPct,
+                  shield: (rail.ruleset ?? 0) === 1,
+                  settled: !!bountySeatState?.paid,
+                  topHunters: Object.entries(rail.seatKo)
+                    .map(([s, ko]) => ({ seat: Number(s), ko }))
+                    .filter((h) => h.ko > 0)
+                    .sort((a, b) => b.ko - a.ko)
+                    .map((h) => ({
+                      ko: h.ko,
+                      name: h.seat === bountyHeroSeat
+                        ? 'You'
+                        : (() => {
+                            const live = players.find((pl) => pl.seatIndex === h.seat)?.pubkey;
+                            const pk = live && !live.startsWith('seat-')
+                              ? live
+                              : rememberedSeatPubkey(h.seat);
+                            return pk ? shortWallet(pk) : `Seat ${h.seat + 1}`;
+                          })(),
+                    })),
+                };
+              })()}
               rewards={sngEnd.rewards}
               rawPoker={rawUnrefined}
               distribution={dist}
@@ -6341,12 +7157,13 @@ export default function PokerTable({
           verifyUrl={verifyUrl}
           handLogRef={handLogRef}
           sngPlayers={players}
-          blinds={blinds}
+          blinds={displayBlinds}
           isCashGame={isCashGame}
           myPubkey={myPubkeyStr}
           totalPlayers={maxPlayers}
           itmCount={itmCount}
           tournamentStartTime={tournamentStartTime}
+          bountyRail={bountyRail ? { ...bountyRail, heroSeat: bountyHeroSeat } : undefined}
         />
         </div>
       </div>

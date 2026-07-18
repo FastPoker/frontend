@@ -25,6 +25,8 @@ import {
   phaseToString,
   TABLE_OFFSETS,
 } from '@/lib/onchain-game';
+import { buildSngDuelActionInstruction } from '@/lib/sng-duel-action';
+import { getSngDuelPda, parseSngDuelState } from '@/lib/sng-duel';
 import { ANCHOR_PROGRAM_ID } from '@/lib/constants';
 
 const TEE_READ_COMMITMENT = 'processed' as const;
@@ -86,8 +88,9 @@ function readOwnedSeatCards(
   return hasValidCardPair(cards) ? cards : undefined;
 }
 
-function canDisplayOwnCards(state: Pick<OnChainGameState, 'phase' | 'handNumber' | 'mySeatIndex' | 'players' | 'dealtMask' | 'rosterHandNumber' | 'isCashGame'> | null | undefined, wallet?: PublicKey | null): boolean {
-  if (!state || !wallet || state.handNumber <= 0 || state.mySeatIndex < 0 || !shouldDisplayOwnCards(state.phase)) return false;
+function canDisplayOwnCards(state: Pick<OnChainGameState, 'phase' | 'handNumber' | 'mySeatIndex' | 'players' | 'dealtMask' | 'rosterHandNumber' | 'isCashGame' | 'duelActiveForHero'> | null | undefined, wallet?: PublicKey | null): boolean {
+  const duelCardWindow = state?.phase === 'Waiting' && state.duelActiveForHero === true;
+  if (!state || !wallet || state.handNumber <= 0 || state.mySeatIndex < 0 || (!duelCardWindow && !shouldDisplayOwnCards(state.phase))) return false;
   const walletStr = wallet.toBase58();
   const me = state.players.find(p => p.seatIndex === state.mySeatIndex && p.pubkey === walletStr);
   if (!me || me.folded || me.isLeaving) return false;
@@ -97,6 +100,7 @@ function canDisplayOwnCards(state: Pick<OnChainGameState, 'phase' | 'handNumber'
   // below remains the real authority on whether this seat holds cards this hand.
   const sngSittingOut = state.isCashGame === false && me.isSittingOut;
   if (!sngSittingOut && (me.isSittingOut || !me.isActive)) return false;
+  if (duelCardWindow) return true;
   if (state.rosterHandNumber && state.rosterHandNumber !== state.handNumber) return false;
   if (typeof state.dealtMask === 'number' && (state.dealtMask & (1 << state.mySeatIndex)) === 0) return false;
   return true;
@@ -284,6 +288,7 @@ export interface OnChainGameState {
   blindDeadline: number;
   revealedHands?: number[];
   handResults?: number[];
+  duelActiveForHero?: boolean;
   activeMask?: number;
   dealtMask?: number;
   rosterHandNumber?: number;
@@ -366,6 +371,8 @@ interface UseOnChainGameReturn {
   error: string | null;
   isConnected: boolean;
   sendAction: (action: 'fold' | 'check' | 'call' | 'raise' | 'allin' | 'sit_out' | 'return_to_play' | 'leave_cash_game' | 'use_time_bank', amount?: number) => Promise<string | null>;
+  /** SnG Duels: submit a Bell-duel choice (all-in/fold) via the seat session key on the ER. */
+  sendDuelAction: (action: 'all-in' | 'fold', seatA: number, seatB: number) => Promise<string | null>;
   isPendingAction: boolean;
   sessionClaimRequired: boolean;
   isClaimingSession: boolean;
@@ -918,6 +925,27 @@ export function useOnChainGame(
         }
       }
 
+      let duelActiveForHero = false;
+      if (
+        mySeatIndex >= 0 &&
+        tableState.gameType !== 3 &&
+        (tableState.maxPlayers === 6 || tableState.maxPlayers === 9)
+      ) {
+        try {
+          const [duelPda] = getSngDuelPda(tablePda);
+          const duelInfo = await teeConn.getAccountInfo(duelPda, TEE_READ_COMMITMENT);
+          if (duelInfo?.data) {
+            const duel = parseSngDuelState(Buffer.from(duelInfo.data));
+            duelActiveForHero =
+              duel.duelActive &&
+              !duel.paid &&
+              (duel.duelSeatA === mySeatIndex || duel.duelSeatB === mySeatIndex);
+          }
+        } catch {
+          duelActiveForHero = false;
+        }
+      }
+
       const phaseName = phaseToString(tableState.phase);
       const ownCardGate = {
         phase: phaseName,
@@ -927,6 +955,7 @@ export function useOnChainGame(
         dealtMask: tableState.dealtMask,
         rosterHandNumber: tableState.rosterHandNumber,
         isCashGame: tableState.gameType === 3,
+        duelActiveForHero,
       };
 
       // My hole cards: read OWN seat_cards via TEE connection only while the
@@ -1051,6 +1080,7 @@ export function useOnChainGame(
         blindDeadline: tableState.blindDeadline || 0,
         revealedHands: tableState.revealedHands,
         handResults: tableState.handResults,
+        duelActiveForHero,
         activeMask: tableState.activeMask,
         dealtMask: tableState.dealtMask,
         rosterHandNumber: tableState.rosterHandNumber,
@@ -2324,6 +2354,52 @@ export function useOnChainGame(
     }
   }, [publicKey, sendTransaction, gameState, refreshState, sessionKey, readSeatApprovedSigner, teeAuthenticated, ensurePlayerConnection]);
 
+  // SnG Duels: submit a duel choice. Session-key path only (gasless on the ER), mirroring sendAction's
+  // session branch - no wallet fallback (the duel is a fast, session-signed in-hand action).
+  const sendDuelAction = useCallback(async (
+    action: 'all-in' | 'fold',
+    seatA: number,
+    seatB: number,
+  ): Promise<string | null> => {
+    const teeConn = teeConnRef.current;
+    if (!sessionKey || !teeConn || !gameState?.tablePda) {
+      setError('Session key required to submit a duel action.');
+      return null;
+    }
+    setIsPendingAction(true);
+    try {
+      const tablePda = new PublicKey(gameState.tablePda);
+      const ix = buildSngDuelActionInstruction(sessionKey.publicKey, tablePda, seatA, seatB, action);
+      const tx = new Transaction();
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+      tx.add(ix);
+      tx.feePayer = sessionKey.publicKey;
+      try {
+        tx.recentBlockhash = (await teeConn.getLatestBlockhash()).blockhash;
+      } catch {
+        const l1 = connectionRef.current;
+        if (l1) tx.recentBlockhash = (await l1.getLatestBlockhash()).blockhash;
+      }
+      tx.sign(sessionKey);
+      const signature = await teeConn.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+      for (let p = 0; p < 10; p++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const st = (await teeConn.getSignatureStatuses([signature]))?.value?.[0];
+        if (st?.err) throw new Error('duel action TX err: ' + JSON.stringify(st.err));
+        if (st?.confirmationStatus === 'confirmed' || st?.confirmationStatus === 'finalized') break;
+      }
+      console.log(`Duel action ${action} submitted (gasless on TEE):`, signature);
+      await refreshState();
+      return signature;
+    } catch (err: any) {
+      console.error('Duel action failed:', err);
+      setError(getErrorMessage(err));
+      throw err;
+    } finally {
+      setIsPendingAction(false);
+    }
+  }, [sessionKey, gameState, refreshState]);
+
   // Tier 3 E2E hook: mirror gameState onto window.__GAMESTATE__ so Playwright
   // specs can wait on protocol state instead of fragile DOM polling. No-op
   // in production builds (see dev-state-hook.ts).
@@ -2337,6 +2413,7 @@ export function useOnChainGame(
     error,
     isConnected,
     sendAction,
+    sendDuelAction,
     isPendingAction,
     sessionClaimRequired,
     isClaimingSession,

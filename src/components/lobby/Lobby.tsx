@@ -32,6 +32,9 @@ import { toast } from 'sonner';
 import { SolIcon, TokenIcon } from '@/components/ui/TokenIcon';
 import { SngJackpotRail } from '@/components/jackpot/SngJackpotRail';
 import { RAW_YIELD_NAME, LUCKY_JACKPOT_NAME, ROYAL_JACKPOT_NAME } from '@/lib/jackpot-format';
+import BountyDisclosure from '@/components/bounty/BountyDisclosure';
+import { sngDuelsEnabled, bountyShieldCopyEnabled } from '@/lib/sng-duel-flags';
+import { MATURITY_BPS_PER_LEVEL, SOL_BOUNTY_BPS } from '@/lib/sng-duel';
 import { buildWalletApiAuth } from '@/lib/wallet-api-auth';
 import { createTransferCheckedInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { STATIC_EXPORT } from '@/lib/runtime-mode';
@@ -634,6 +637,10 @@ function SngPoolCard({
     : 0;
   const pokerPool = (grossPokerUnrefined * 0.9) / 1_000_000;
   const solPool = poolData ? (poolData.entryAmount * queue.maxPlayers) / 1e9 : 0;
+  const isDuelFormat = sngDuelsEnabled() && (spots === 6 || spots === 9);
+  const bountyPoints = Math.max(1, spots);
+  const bountyPerPointSol = (solPool * SOL_BOUNTY_BPS / 10_000) / bountyPoints;
+  const bountyPerPointFp = pokerPool / bountyPoints;
   // SOL prize pool is paid only to ITM (top 1/2/3). POKER (Raw Yield) is
   // spread to every paid place per the new BPS schedule. Last seat is 0
   // (HU 2nd / 6-max 6th / 9-max 8th+9th). Mirrors PokerPayoutStructure in
@@ -914,6 +921,37 @@ function SngPoolCard({
           </div>
         );
       })()}
+
+      {isDuelFormat && (
+        <div className="relative rounded-sm border border-amber/30 bg-black/35 px-2 py-2" data-format="bounty">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="font-display text-[11px] uppercase tracking-[0.18em] text-amber">SNG DUELS &middot; FLAT BOUNTY</div>
+              <div className="font-mono text-[8px] tracking-[0.16em] text-boneDim/65 mt-0.5">1 point per seat &middot; knockouts move points</div>
+            </div>
+            <span className="shrink-0 rounded-sm border border-amber/30 bg-amber/10 px-1.5 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-amber">Bounty</span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[9px] leading-tight">
+            <div className="min-w-0">
+              <div className="text-boneDim/50 uppercase tracking-[0.14em]">Per point at full maturity</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
+                <span className="inline-flex items-center gap-1 text-emerald-300"><SolIcon size={10} />{fmtSol(bountyPerPointSol)}</span>
+                <span className="inline-flex items-center gap-1 text-amber"><TokenIcon mint={POKER_MINT.toBase58()} size={10} alt="$FP" />{fmtFP(bountyPerPointFp)}</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-boneDim/50 uppercase tracking-[0.14em]">Maturity</div>
+              <div className="mt-0.5 text-bone/80 tabular-nums">+{MATURITY_BPS_PER_LEVEL / 100}% per blind level &middot; 100% at L4</div>
+            </div>
+            <div className="min-w-0 text-boneDim/75">
+              <span className="text-emerald-300">SOL</span> 50% points / 50% finish
+            </div>
+            <div className="min-w-0 text-boneDim/75">
+              <span className="text-amber">$FP</span> 100% points &times; maturity
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Paid places - pool totals double as column headers */}
       <div className="relative rounded-sm bg-black/30">
@@ -1273,26 +1311,59 @@ function SngJoinModal({
             <div>
               <Eyebrow>Payouts</Eyebrow>
               <div className="mt-1 flex flex-col gap-0.5">
-                {pokerPayouts.map((pPct, i) => {
-                  const sPct = solPayouts[i] ?? 0;
-                  if (pPct === 0 && sPct === 0) return null;
+                {(() => {
+                  // Duel mode (6/9-max, flag on): SOL splits 50% knockout bounties / 50% finish,
+                  // and $FP is PURE bounty x maturity - the legacy per-place $FP ladder does not
+                  // exist there and the SOL ladder pays from the ITM HALF only.
+                  const isDuelFormat = sngDuelsEnabled() && (seats === 6 || seats === 9);
+                  const solLadderPool = isDuelFormat ? solPool * (10_000 - SOL_BOUNTY_BPS) / 10_000 : solPool;
+                  const rows = pokerPayouts.map((pPct, i) => {
+                    const sPct = solPayouts[i] ?? 0;
+                    if ((isDuelFormat || pPct === 0) && sPct === 0) return null;
+                    return (
+                      <div key={i} className="font-mono text-[10px] tabular-nums leading-tight">
+                        <span className="text-boneDim/60 uppercase">{place(i)}</span>
+                        <span className="text-boneDim/30 mx-1">·</span>
+                        {solLadderPool > 0 && sPct > 0 && (
+                          <span className="text-gold inline-flex items-center gap-0.5">
+                            <SolIcon size={10} />{fmtSol(solLadderPool * sPct / 100)}
+                          </span>
+                        )}
+                        {!isDuelFormat && pokerPool > 0 && pPct > 0 && (
+                          <span className="text-amber/80 ml-1 inline-flex items-center gap-0.5">
+                            +{fmtFP(pokerPool * pPct / 100)} <TokenIcon mint={POKER_MINT.toBase58()} size={9} alt="$FP" />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                  if (!isDuelFormat) return rows;
+                  // Flat Bounty: every seat is SEEDED 1 point (denominator = seats, not
+                  // seats-1 knockouts) and the value shown is per point. Points are conserved:
+                  // knockouts move them and busted players keep earned points as payout credit.
+                  const shieldCopy = bountyShieldCopyEnabled();
+                  const units = shieldCopy ? Math.max(1, seats) : Math.max(1, seats - 1);
+                  const koSol = (solPool * SOL_BOUNTY_BPS / 10_000) / units;
+                  const koFp = pokerPool / units;
                   return (
-                    <div key={i} className="font-mono text-[10px] tabular-nums leading-tight">
-                      <span className="text-boneDim/60 uppercase">{place(i)}</span>
-                      <span className="text-boneDim/30 mx-1">·</span>
-                      {solPool > 0 && sPct > 0 && (
-                        <span className="text-gold inline-flex items-center gap-0.5">
-                          <SolIcon size={10} />{fmtSol(solPool * sPct / 100)}
+                    <>
+                      {rows}
+                      {/* per-unit value at full maturity - the duel-mode reward story */}
+                      {/* One coherent line; the maturity qualifier rides as a suffix chip instead
+                          of an orphaned wrap fragment (finding 2026-07-03). */}
+                      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 font-mono text-[10px] tabular-nums leading-tight" title={shieldCopy
+                        ? 'SOL: 50% of the pool splits by bounty points held at the end. $FP: 100% by points, scaled by Maturity (grows each blind level). Values shown per point; every seeded point stays in play, knockouts just move them.'
+                        : 'SOL: 50% of the pool pays knockout bounties. $FP: 100% bounty, scaled by Maturity (grows each blind level). Values shown per knockout at 100% maturity.'}>
+                        <span className="whitespace-nowrap"><span className="text-amber uppercase">{shieldCopy ? 'Per point' : 'Per KO'}</span><span className="text-boneDim/30 mx-1">&middot;</span></span>
+                        <span className="whitespace-nowrap text-gold inline-flex items-center gap-0.5"><SolIcon size={10} />{fmtSol(koSol)}</span>
+                        <span className="whitespace-nowrap text-amber/80 inline-flex items-center gap-0.5">
+                          +{fmtFP(koFp)} <TokenIcon mint={POKER_MINT.toBase58()} size={9} alt="$FP" />
                         </span>
-                      )}
-                      {pokerPool > 0 && pPct > 0 && (
-                        <span className="text-amber/80 ml-1 inline-flex items-center gap-0.5">
-                          +{fmtFP(pokerPool * pPct / 100)} <TokenIcon mint={POKER_MINT.toBase58()} size={9} alt="$FP" />
-                        </span>
-                      )}
-                    </div>
+                        <span className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-px text-[8px] text-boneDim/60">@100% maturity</span>
+                      </div>
+                    </>
                   );
-                })}
+                })()}
               </div>
             </div>
           </div>
@@ -1321,6 +1392,8 @@ function SngJoinModal({
           )}
 
           <div className="px-5 py-3 grow overflow-y-auto min-h-0">
+            {/* Scrolls with the body so the CONFIRM JOIN footer can never be pushed off-screen. */}
+            <BountyDisclosure maxPlayers={format.seats} className="mb-3" />
             <Eyebrow>Join flow &middot; on-chain</Eyebrow>
             <div className="mt-2 space-y-0">
               {SNG_JOIN_STEPS.map((s, i) => {

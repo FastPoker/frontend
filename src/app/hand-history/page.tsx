@@ -28,6 +28,22 @@ interface ApiHandRecord {
   rake: number;
   winners: number[];
   jackpot?: JackpotReceipt | null;
+  /** HRv1 action stream; duel events carry the SnG Duels flags. */
+  actions?: Array<{
+    amount: number;
+    duel?: {
+      bountyBattle: boolean;
+      pointTransfer: boolean;
+      chipStake: boolean;
+    };
+  }>;
+}
+
+/** One duel badge per hand row. */
+function duelBadge(record: ApiHandRecord): { label: string; title: string } | null {
+  const duels = (record.actions ?? []).filter(a => a.duel);
+  if (duels.length === 0) return null;
+  return { label: 'DUEL', title: 'SnG Duel fired during this hand' };
 }
 
 interface ApiResponse {
@@ -228,9 +244,19 @@ function HandRow({ record }: { record: ApiHandRecord }) {
   const jp = record.jackpot;
   const kindColor = !jp ? null : getKindColor(jp.miniHit, jp.grandHit);
   const kindLabel = !jp ? null : getKindLabel(jp.miniHit, jp.grandHit);
+  const duel = duelBadge(record);
 
   return (
     <div className="px-5 py-3 flex items-center gap-3">
+      {duel && (
+        <span
+          className="font-mono text-[8.5px] tracking-[0.22em] px-1.5 py-0.5 rounded-sm shrink-0 inline-flex items-center gap-1 text-amber border border-amber/40 bg-amber/10"
+          title={duel.title}
+        >
+          <span aria-hidden>&#9876;</span>
+          {duel.label}
+        </span>
+      )}
       {jp && (
         <span
           className="font-mono text-[8.5px] tracking-[0.22em] px-1.5 py-0.5 rounded-sm shrink-0 inline-flex items-center gap-1"

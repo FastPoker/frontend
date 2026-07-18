@@ -134,6 +134,7 @@ function CashGameView() {
     isLoading: gameLoading,
     isConnected: gameConnected,
     sendAction,
+    sendDuelAction,
     isPendingAction,
     sessionClaimRequired,
     isClaimingSession,
@@ -3410,6 +3411,8 @@ function CashGameView() {
               onShowCards={showCards.reveal}
               revealedThisHand={showCards.revealedThisHand}
               onAction={isSeated ? handleGameAction : undefined}
+              onDuelAction={sendDuelAction}
+              bountyTeeConnection={activeConnection}
               isMyTurn={!!isMyTurn}
               sessionClaimRequired={sessionClaimRequired}
               sessionClaimDebug={claimDebug}

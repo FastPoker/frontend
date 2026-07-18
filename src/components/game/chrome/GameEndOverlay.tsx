@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useClaimableTotals } from '@/hooks/useClaimableTotals';
+import { formatPoints } from '@/lib/sng-duel-view';
 import { createPortal } from 'react-dom';
 
 export type GameEndResult = 'winner' | 'itm' | 'out';
@@ -22,6 +24,20 @@ export interface GameEndOverlayProps {
   payout: { poker: number; sol: number };
   /** Total table reward pools, before per-place split. */
   rewards?: { pokerPool: number; solPool: number };
+  /** SnG Duels: the hero's bounty breakdown. Bounty pays even OUT of the money, so this section
+   *  renders regardless of finish; it's the mode's core reward story. */
+  bounty?: {
+    koCount: number;
+    fpBounty: number;      // hero's $FP from bounties (matured share; $FP is pure bounty in duel mode)
+    solBounty: number;     // hero's SOL from the bounty half
+    maturityPct: number;   // maturity the bounties settled/project at
+    topHunters: { name: string; ko: number }[];
+    /** Bounty Shield (ruleset 1): counts are HELD POINTS, not knockouts - labels switch. */
+    shield?: boolean;
+    /** Sidecar paid flag. Under shield, points MOVE on the final bust itself, so the
+     *  at-open snapshot can be one transfer stale - re-snapshot once when this flips. */
+    settled?: boolean;
+  };
   xpEarned?: number;
   onShare?: () => void;
   onPlayAgain?: () => void;
@@ -108,6 +124,7 @@ export function GameEndOverlay({
   tierName,
   playerName = 'You',
   payout,
+  bounty,
   rewards,
   xpEarned,
   onShare,
@@ -123,21 +140,81 @@ export function GameEndOverlay({
   const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState<null | 'claim' | 'stake'>(null);
   useEffect(() => { setMounted(true); }, []);
+  // Freeze the RESULT data at open (finding 2026-07-04): the table resets underneath the
+  // open overlay (tournamentStartTime -> 0, roster cleared) and the live-derived props
+  // degrade in place - SOL pool flips to 0.000, the prize row vanishes, top-hunter names
+  // fall back to "Seat N", and the bounty footer contradicts the header. Process props
+  // (open/distribution/tournamentOver/claim totals) stay live; the snapshot refreshes
+  // once on the tournamentOver false->true edge, the moment results actually finalize.
+  type ResultSnap = {
+    result: GameEndResult; place: number; tierName: string; playerName: string;
+    payout: { poker: number; sol: number };
+    rewards?: GameEndOverlayProps['rewards'];
+    bounty?: GameEndOverlayProps['bounty'];
+    xpEarned?: number; rawPoker: number;
+  };
+  const [snap, setSnap] = useState<ResultSnap | null>(null);
+  const wasOverRef = useRef(false);
+  const wasSettledRef = useRef(false);
+  useEffect(() => {
+    if (!open) { setSnap(null); wasOverRef.current = false; wasSettledRef.current = false; return; }
+    // Re-snapshot on the tournamentOver edge (results finalize) AND, under Bounty
+    // Shield, once when the sidecar settles - the final bust moves points, so the
+    // at-open bounty reading can be one transfer stale (live find: overlay said
+    // "2 points / 0.09" while settlement paid 1 retained point / 0.045).
+    const settledEdge = !!bounty?.shield && !!bounty?.settled && !wasSettledRef.current;
+    setSnap((prev) =>
+      !prev || (tournamentOver && !wasOverRef.current) || settledEdge
+        ? { result, place, tierName, playerName, payout, rewards, bounty, xpEarned, rawPoker }
+        : prev,
+    );
+    wasOverRef.current = tournamentOver;
+    if (bounty?.settled) wasSettledRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tournamentOver, bounty?.settled]);
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, [open]);
+  // Keyboard dismissal (finding 2026-07-03: the overlay traps the whole page with a
+  // mouse-only escape hatch).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  // Fast-pay awareness: E1 pays claimable SOL ~40-70s after Complete - often before the
+  // legacy distribution signal flips. Watch the shared claimable poll; once sngSol RISES
+  // above its at-open snapshot, the "distributing" spinner becomes a claim-ready state.
+  const { totals: claimTotals } = useClaimableTotals();
+  const sngSolAtOpenRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (open && sngSolAtOpenRef.current === null) sngSolAtOpenRef.current = claimTotals?.sngSol ?? 0;
+    if (!open) sngSolAtOpenRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const prizeLanded =
+    sngSolAtOpenRef.current !== null && (claimTotals?.sngSol ?? 0) > sngSolAtOpenRef.current;
 
   if (!open || !mounted) return null;
+
+  // Render from the at-open snapshot; live props only feed the very first paint
+  // (identical values at that moment) and the process-state panels below.
+  if (snap) {
+    ({ result, place, tierName, playerName, payout, rewards, bounty, xpEarned, rawPoker } = snap);
+  }
 
   const isWinner = result === 'winner';
   const isItm = result === 'itm';
   const label = isWinner ? 'VICTORY' : isItm ? 'IN THE MONEY' : 'ELIMINATED';
   const tone = isWinner ? '#FFD96A' : isItm ? '#F2C36A' : '#B84515';
   const suffix = placeSuffix(place);
-  const defaultXp = xpEarned ?? (isWinner ? 250 : place === 2 ? 150 : 100);
+  // Fallback mirrors the CONTRACT XP awards (XP_SNG_WIN/ITM/PLAY = 200/75/25) - the old
+  // 250/150/100 guesses displayed prizes the chain never paid (finding 2026-07-03).
+  const defaultXp = xpEarned ?? (isWinner ? 200 : isItm ? 75 : 25);
 
   // ─── Refine / distribution state ────────────────────────────────────────
   // While the crank settles the SNG on L1 the prize hasn't been credited yet;
@@ -276,7 +353,30 @@ export function GameEndOverlay({
           {/* Prize-distribution progress: shown while the crank settles the
               SNG on L1 (undelegate -> distribute_prizes). The payout figures
               below update the moment the credit lands on-chain. */}
-          {stillSettling && (
+          {stillSettling && prizeLanded && (
+            <div className="mt-6 mx-auto max-w-sm rounded-lg border border-emerald-400/60 bg-[#0B0D10]/95 px-4 py-3.5 shadow-[0_12px_44px_rgba(0,0,0,0.75)] backdrop-blur-md ring-1 ring-emerald-400/10">
+              <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-emerald-400 font-bold text-center" style={{ textShadow: '0 0 12px rgba(52,211,153,0.45)' }}>
+                Prizes landed
+              </div>
+              <div className="font-mono text-[10px] text-bone/75 text-center mt-2 leading-relaxed">
+                Your SOL is already claimable - the table is still tidying up behind the scenes.
+              </div>
+              <button
+                className="mt-3 w-full rounded-md bg-emerald-500/90 hover:bg-emerald-400 py-2 font-mono text-[11px] font-bold tracking-[0.2em] uppercase text-black transition-colors"
+                onClick={() => {
+                  // Deep-link into the footer claim drawer (its confirm modal guards the spend).
+                  const btn = Array.from(document.querySelectorAll('button')).find(
+                    (b) => b.textContent?.includes('CLAIMABLE'),
+                  ) as HTMLButtonElement | undefined;
+                  onClose();
+                  btn?.click();
+                }}
+              >
+                Open claims
+              </button>
+            </div>
+          )}
+          {stillSettling && !prizeLanded && (
             <div className="mt-6 mx-auto max-w-sm rounded-lg border border-amber/70 bg-[#0B0D10]/95 px-4 py-3.5 shadow-[0_12px_44px_rgba(0,0,0,0.75)] backdrop-blur-md ring-1 ring-amber/10">
               <div className="flex items-center justify-center gap-2.5">
                 <span className="w-4 h-4 border-2 border-amber/30 border-t-amber rounded-full animate-spin" />
@@ -297,6 +397,35 @@ export function GameEndOverlay({
               <div className="font-mono text-[10px] text-bone/75 text-center mt-2.5 leading-relaxed">
                 Your emissions are settling on-chain. The payout updates the moment it lands.
               </div>
+            </div>
+          )}
+
+          {/* Prizes already claimable with nothing left to settle: the celebratory
+              "Prizes landed" panel above keys off a RISE in claimable SOL after open,
+              so prizes that land BEFORE the overlay opens (E1 fast-pay beats the
+              overlay regularly) or after distribution completes would otherwise show
+              no claim path at all (finding 2026-07-04). Quiet row, same deep-link. */}
+          {/* Also covers landed-then-completed: the celebratory panel above dies with
+              stillSettling when distribution finishes, so without this row a player who
+              watched "Prizes landed" would see the claim path vanish (game 1 live). */}
+          {tournamentOver && !stillSettling && (claimTotals?.sngSol ?? 0) > 0 && (
+            <div className="mt-6 mx-auto max-w-sm rounded-md border border-emerald-400/30 bg-[#0B0D10]/80 px-4 py-2.5 flex items-center justify-between gap-3">
+              <span className="font-mono text-[10px] text-bone/70 tabular-nums text-left">
+                {(claimTotals!.sngSol).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')} SOL claimable in your bank
+              </span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md border border-emerald-400/50 hover:bg-emerald-500/15 px-3 py-1.5 font-mono text-[10px] font-bold tracking-[0.18em] uppercase text-emerald-300 transition-colors"
+                onClick={() => {
+                  const btn = Array.from(document.querySelectorAll('button')).find(
+                    (b) => b.textContent?.includes('CLAIMABLE'),
+                  ) as HTMLButtonElement | undefined;
+                  onClose();
+                  btn?.click();
+                }}
+              >
+                Open claims
+              </button>
             </div>
           )}
 
@@ -368,6 +497,63 @@ export function GameEndOverlay({
                   </span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* SnG Duels: bounty breakdown. Rendered for EVERY finish (bounty pays out of the money
+              too - that's the mode). Mobile-first: wraps to a 2x2 grid on phones. */}
+          {bounty && (
+            <div className="mt-6 mx-auto max-w-sm rounded-xl border border-amber/25 bg-black/60 px-4 py-3.5 backdrop-blur-md" data-format="bounty">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] tracking-[0.24em] uppercase text-amber font-bold">Bounty Bank</span>
+                <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-bone/45">Duel mode</span>
+              </div>
+              {/* Tightened 2026-07-03 (user crop): text-2xl x4 columns overflowed a max-w-sm
+                  card - "+0.000" crashed into "100%". Uniform text-xl, trailing-zero-trimmed
+                  SOL, nowrap cells. */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-2 gap-y-3 text-center">
+                <div className="min-w-0">
+                  <div className="whitespace-nowrap font-display text-xl leading-none tabular-nums text-amber">{formatPoints(bounty.koCount)}</div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.2em] text-bone/45">{bounty.shield ? 'Points held' : 'Knockouts'}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="inline-flex max-w-full items-baseline gap-1 whitespace-nowrap font-display text-xl leading-none tabular-nums text-gold">
+                    +{Math.round(bounty.fpBounty).toLocaleString()}
+                    <img src="/brand/app-icon.png" alt="$FP" width={11} height={11} className="rounded-full opacity-90" />
+                  </div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.2em] text-bone/45">$FP banked</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="inline-flex max-w-full items-baseline gap-1 whitespace-nowrap font-display text-xl leading-none tabular-nums text-emerald-400">
+                    +{(bounty.solBounty.toFixed(3).replace(/\.?0+$/, '') || '0')}
+                    <img src="/tokens/sol.svg" alt="SOL" width={11} height={11} className="rounded-full opacity-90" />
+                  </div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.2em] text-bone/45">SOL banked</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="whitespace-nowrap font-display text-xl leading-none tabular-nums text-gold">{bounty.maturityPct}%</div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.2em] text-bone/45">Maturity</div>
+                </div>
+              </div>
+              {bounty.topHunters.length > 0 && (
+                <div className="mt-3 border-t border-white/[0.08] pt-2.5">
+                  <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-bone/40 mb-1.5">Top hunters</div>
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                    {bounty.topHunters.slice(0, 3).map((h) => (
+                      <span key={h.name} className="font-mono text-[10px] text-bone/75">
+                        {h.name} <span className="text-amber tabular-nums">&times;{formatPoints(h.ko)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bounty.koCount > 0 && payout.sol <= 0 && payout.poker <= 0 && (
+                <div className="mt-2.5 text-center font-mono text-[9px] text-bone/55 leading-relaxed">
+                  {bounty.shield
+                    ? 'Out of the money, but your points still pay.'
+                    : 'Out of the money, but your bounties still pay.'}
+                </div>
+              )}
             </div>
           )}
 

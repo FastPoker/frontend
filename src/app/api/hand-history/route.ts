@@ -73,6 +73,27 @@ interface HandActionEvent {
   wallet: string;
   operator: string;
   aux: number;
+  duel?: {
+    stage: number;
+    round: number;
+    seatA: number;
+    seatB: number;
+    choiceA: number;
+    choiceB: number;
+    winner: number;
+    loser: number;
+    flags: number;
+    blindLevel: number;
+    aChips: number;
+    bChips: number;
+    board: string[];
+    aHole: string[];
+    bHole: string[];
+    // Duel outcome bits.
+    bountyBattle: boolean;
+    pointTransfer: boolean;
+    chipStake: boolean;
+  };
 }
 
 interface ParsedHandRecord {
@@ -347,6 +368,51 @@ function parseHandReportPayload(payload: Buffer, meta: HandReportMeta, sig: stri
         actions,
       };
       offset += 160;
+      continue;
+    }
+
+    if (kind === 10) {
+      if (offset + 128 > payload.length) break;
+      const e = payload.subarray(offset, offset + 128);
+      const boardBytes = Array.from(e.subarray(44, 49));
+      const aHoleBytes = Array.from(e.subarray(49, 51));
+      const bHoleBytes = Array.from(e.subarray(51, 53));
+      actions.push({
+        kind: e[0],
+        street: e[2],
+        actor: e[3],
+        action: e[1],
+        handNumber: Number(e.readBigUInt64LE(4)),
+        amount: Number(e.readBigUInt64LE(20)),
+        pot: 0,
+        wallet: new PublicKey(e.subarray(53, 85)).toBase58(),
+        operator: new PublicKey(e.subarray(85, 117)).toBase58(),
+        aux: e.readUInt32LE(117),
+        duel: {
+          stage: e[1],
+          round: e[2],
+          seatA: e[12],
+          seatB: e[13],
+          choiceA: e[14],
+          choiceB: e[15],
+          winner: e[16],
+          loser: e[17],
+          flags: e[18],
+          blindLevel: e[19],
+          aChips: Number(e.readBigUInt64LE(28)),
+          bChips: Number(e.readBigUInt64LE(36)),
+          // Duel flag bits (hand_report_buffer.rs): 1<<0 LOSER_BUSTED, 1<<1 TIE,
+          // 1<<2 TOURNAMENT_COMPLETE, 1<<3 BOUNTY_BATTLE, 1<<4 POINT_TRANSFER,
+          // 1<<5 CHIP_STAKE.
+          bountyBattle: (e[18] & 0x08) !== 0,
+          pointTransfer: (e[18] & 0x10) !== 0,
+          chipStake: (e[18] & 0x20) !== 0,
+          board: boardBytes.filter(c => c !== 255 && c <= 51).map(cardLabel),
+          aHole: aHoleBytes.filter(c => c !== 255 && c <= 51).map(cardLabel),
+          bHole: bHoleBytes.filter(c => c !== 255 && c <= 51).map(cardLabel),
+        },
+      });
+      offset += 128;
       continue;
     }
 
