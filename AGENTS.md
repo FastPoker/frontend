@@ -3,6 +3,18 @@
 Use this file when Codex or another coding agent is asked to run, verify, modify,
 or publish this standalone client.
 
+## Repository Identity
+
+- Local path: `/data/FastPoker/Public/Frontend`
+- Canonical remote: `https://github.com/FastPoker/frontend.git`
+- This is not `/data/FastPoker/frontend`, which is the private Nutmarket
+  production frontend.
+- Do not merge or mirror the private production `client-v2` tree into this
+  repository. Port only changes explicitly approved for the standalone public
+  release, preserving the boundaries below.
+- Before pushing, verify that `origin` is the canonical public remote and that
+  `main` tracks `origin/main`.
+
 ## Project Position
 
 - This is a source-code release. Do not add packaged backend assumptions unless the
