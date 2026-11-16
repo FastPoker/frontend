@@ -2,41 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLatestBlockhashViaIndexer } from '@/lib/indexer-client';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getL1Rpc } from '@/lib/rpc-config';
+import { chargeBudgets, checkProvenance, clientIp, type Rejection } from '@/lib/rpc-proxy-guard';
 
 /**
- * Chunk 8b — bound quota abuse on the open sendRawTransaction relay. Per
- * IP, allow up to SEND_RATE_MAX tx sends per SEND_RATE_WINDOW_MS. Map is
- * in-process (single Next.js instance); multi-instance deployments need
- * a shared store. Read-only methods (getAccountInfo, getBalance, etc.)
- * are not rate-limited — cheap + cachable.
+ * Legacy fixed-method RPC relay. Same abuse guard as the `/rpc` proxy:
+ * same-origin browser requests only, per-IP and global budgets (see
+ * rpc-proxy-guard). Budgets are in-process; multi-instance deployments need a
+ * shared limiter in front.
  */
-const SEND_RATE_MAX = 10;
-const SEND_RATE_WINDOW_MS = 10_000;
-const sendHits = new Map<string, number[]>();
-function ipOf(req: NextRequest): string {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    'unknown'
+function denied(r: Rejection) {
+  return NextResponse.json(
+    { error: r.message },
+    { status: r.status, headers: r.retryAfterSec ? { 'Retry-After': String(r.retryAfterSec) } : {} },
   );
 }
-function sendAllowed(req: NextRequest): boolean {
-  const ip = ipOf(req);
-  const now = Date.now();
-  const hits = (sendHits.get(ip) || []).filter((t) => now - t < SEND_RATE_WINDOW_MS);
-  if (hits.length >= SEND_RATE_MAX) {
-    sendHits.set(ip, hits);
-    return false;
-  }
-  hits.push(now);
-  sendHits.set(ip, hits);
-  return true;
+
+/** Upstream errors must never echo the provider URL (it carries the key). */
+function safeMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : 'RPC request failed';
+  return raw.replace(/\b(?:https?|wss?):\/\/\S+/gi, '[rpc]').slice(0, 500);
 }
 
 export async function POST(request: NextRequest) {
+  const provenance = checkProvenance(request);
+  if (provenance) return denied(provenance);
+
   try {
     const body = await request.json();
     const { method, params } = body;
+    const limited = chargeBudgets(clientIp(request), {
+      credits: 1,
+      sends: method === 'sendRawTransaction' ? 1 : 0,
+    });
+    if (limited) return denied(limited);
     const connection = new Connection(getL1Rpc(), 'confirmed');
 
     switch (method) {
@@ -80,12 +78,6 @@ export async function POST(request: NextRequest) {
       }
 
       case 'sendRawTransaction': {
-        if (!sendAllowed(request)) {
-          return NextResponse.json(
-            { error: `Rate limited: max ${SEND_RATE_MAX} sendRawTransaction per ${SEND_RATE_WINDOW_MS / 1000}s` },
-            { status: 429 },
-          );
-        }
         const [txBase64] = params;
         const txBuffer = Buffer.from(txBase64, 'base64');
         const signature = await connection.sendRawTransaction(txBuffer, {
@@ -119,8 +111,8 @@ export async function POST(request: NextRequest) {
       default:
         return NextResponse.json({ error: `Unknown method: ${method}` }, { status: 400 });
     }
-  } catch (error: any) {
-    console.error('RPC API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('RPC API error:', safeMessage(error));
+    return NextResponse.json({ error: safeMessage(error) }, { status: 500 });
   }
 }

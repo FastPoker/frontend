@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getL1Rpc } from '@/lib/rpc-config';
 import { createBreaker } from '@/lib/circuit-breaker';
+import {
+  MAX_BODY_BYTES,
+  chargeBudgets,
+  checkPayload,
+  checkProvenance,
+  clientIp,
+  type Rejection,
+} from '@/lib/rpc-proxy-guard';
 
 // Circuit breaker — trip after 8 consecutive 5xx/network errors in 10s, stay
 // open 30s, then probe. RPC is the most load-bearing upstream; tripping fast
@@ -14,22 +22,19 @@ const rpcBreaker = createBreaker('rpc-proxy', {
 });
 
 /**
- * Transparent JSON-RPC passthrough.
+ * Guarded JSON-RPC proxy for this site's own pages.
  *
  * Used by the `/rpc` rewrite (see next.config.js). The browser POSTs JSON-RPC
- * payloads to `/rpc`, Next forwards to here, and we forward to the real L1
- * upstream with sanitized headers so providers like Helius don't reject the
- * forwarded request based on the original `Origin` header.
+ * payloads to `/rpc`, and we forward them to the real L1 upstream, whose URL
+ * (and provider key) never leaves the server.
  *
- * Key behaviors:
- *   - Strips `origin`, `referer`, `host`, and hop-by-hop headers before
- *     forwarding to the upstream.
- *   - Forwards request body verbatim (single-call or batch JSON-RPC).
- *   - Pipes the upstream response body and status back unchanged.
- *   - Adds `Cache-Control: no-store` so responses don't get cached anywhere.
+ * This is deliberately NOT a general-purpose RPC endpoint — every request
+ * passes `rpc-proxy-guard` first (same-origin browser provenance, method
+ * allowlist, parameter limits, per-IP and global budgets).
  *
- * No origin-restrictions on the browser side: the response is served from
- * the same origin as the page, so CORS never applies.
+ * Nothing from the browser request is forwarded except the validated body,
+ * and nothing from the upstream response is returned except status, content
+ * type and body — so neither side can smuggle headers through.
  */
 
 export const dynamic = 'force-dynamic';
@@ -37,74 +42,75 @@ export const dynamic = 'force-dynamic';
 // through the standard Node stack with full keep-alive support.
 export const runtime = 'nodejs';
 
-/** Headers that should never be forwarded upstream. */
-const STRIPPED_REQUEST_HEADERS = new Set([
-  'host',
-  'origin',
-  'referer',
-  'cookie',
-  'connection',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'te',
-  'trailers',
-  'transfer-encoding',
-  'upgrade',
-  'content-length',
-  // x-forwarded-* leaks deployment topology to upstream; not useful for RPC
-  'x-forwarded-for',
-  'x-forwarded-host',
-  'x-forwarded-proto',
-  'x-real-ip',
-  'x-vercel-forwarded-for',
-  'x-vercel-ip-country',
-  'x-vercel-ip-country-region',
-  'x-vercel-ip-city',
-]);
-
-/** Headers we drop from the upstream response before returning to the browser. */
-const STRIPPED_RESPONSE_HEADERS = new Set([
-  'connection',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'te',
-  'trailers',
-  'transfer-encoding',
-  'upgrade',
-  'content-encoding',
-  'content-length',
-  'access-control-allow-origin',
-  'access-control-allow-credentials',
-  'access-control-allow-headers',
-  'access-control-allow-methods',
-  'access-control-expose-headers',
-  'access-control-max-age',
-]);
-
-function buildForwardHeaders(req: NextRequest): Headers {
-  const forwarded = new Headers();
-  req.headers.forEach((value, key) => {
-    if (STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) return;
-    forwarded.set(key, value);
-  });
-  // Ensure JSON-RPC default content type if the browser didn't set one.
-  if (!forwarded.has('content-type')) {
-    forwarded.set('content-type', 'application/json');
-  }
-  return forwarded;
+function rpcError(status: number, message: string, headers: Record<string, string> = {}) {
+  return NextResponse.json(
+    { jsonrpc: '2.0', id: null, error: { code: status === 429 ? -32005 : -32600, message } },
+    { status, headers: { 'Cache-Control': 'no-store', ...headers } },
+  );
 }
 
-async function passthrough(req: NextRequest, body: BodyInit | null) {
+function reject(r: Rejection) {
+  return rpcError(
+    r.status,
+    r.message,
+    r.retryAfterSec ? { 'Retry-After': String(r.retryAfterSec) } : {},
+  );
+}
+
+function isRejection(v: unknown): v is Rejection {
+  return typeof (v as Rejection)?.status === 'number';
+}
+
+/** Reads the body up to MAX_BODY_BYTES; null when it is larger. */
+async function readBody(req: NextRequest): Promise<Uint8Array | null> {
+  const declared = Number(req.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
+  if (!req.body) return new Uint8Array();
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+  return out;
+}
+
+export async function POST(req: NextRequest) {
+  const provenance = checkProvenance(req);
+  if (provenance) return reject(provenance);
+
+  const body = await readBody(req);
+  if (!body) return rpcError(413, 'Request body too large');
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    return rpcError(400, 'Invalid JSON');
+  }
+
+  const parsed = checkPayload(payload);
+  if (isRejection(parsed)) return reject(parsed);
+
+  const limited = chargeBudgets(clientIp(req), parsed);
+  if (limited) return reject(limited);
+
   let upstream: string;
   try {
     upstream = getL1Rpc();
-  } catch (err) {
-    return NextResponse.json(
-      { error: { code: -32603, message: (err as Error).message || 'RPC not configured' } },
-      { status: 500 },
-    );
+  } catch {
+    return rpcError(500, 'RPC not configured');
   }
 
   // Fail-fast when breaker is open — clients get an immediate 503 instead of
@@ -122,19 +128,13 @@ async function passthrough(req: NextRequest, body: BodyInit | null) {
     );
   }
 
-  const headers = buildForwardHeaders(req);
   try {
     const upstreamRes = await fetch(upstream, {
-      method: req.method,
-      headers,
-      body,
-      // Streaming the body avoids loading large batch responses into memory.
-      // Solana JSON-RPC payloads are typically small, but program-account
-      // queries can be hefty.
-      // @ts-expect-error -- duplex is required for streamed bodies in Node 18+
-      duplex: 'half',
-      // No redirect; the upstream RPC shouldn't redirect and following one
-      // could expose a different host to the client.
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: body as BodyInit,
+      // The upstream RPC shouldn't redirect, and a redirect target could carry
+      // the provider URL — never follow one and never relay it.
       redirect: 'manual',
       cache: 'no-store',
     });
@@ -142,47 +142,29 @@ async function passthrough(req: NextRequest, body: BodyInit | null) {
     if (upstreamRes.status >= 500) rpcBreaker.recordFailure();
     else rpcBreaker.recordSuccess();
 
-    const responseHeaders = new Headers();
-    upstreamRes.headers.forEach((value, key) => {
-      if (STRIPPED_RESPONSE_HEADERS.has(key.toLowerCase())) return;
-      responseHeaders.set(key, value);
-    });
-    responseHeaders.set('Cache-Control', 'no-store');
-    responseHeaders.set('X-Rpc-Breaker', rpcBreaker.state());
+    if (upstreamRes.status >= 300 && upstreamRes.status < 400) {
+      return rpcError(502, 'Upstream RPC returned an unexpected redirect', {
+        'X-Rpc-Breaker': rpcBreaker.state(),
+      });
+    }
 
     return new NextResponse(upstreamRes.body, {
       status: upstreamRes.status,
-      statusText: upstreamRes.statusText,
-      headers: responseHeaders,
-    });
-  } catch (err) {
-    rpcBreaker.recordFailure();
-    return NextResponse.json(
-      {
-        error: {
-          code: -32603,
-          message: 'Upstream RPC fetch failed',
-          data: { detail: (err as Error)?.message?.slice(0, 200) },
-        },
+      headers: {
+        'Content-Type': upstreamRes.headers.get('content-type') || 'application/json',
+        'Cache-Control': 'no-store',
+        'X-Rpc-Breaker': rpcBreaker.state(),
       },
-      { status: 502, headers: { 'X-Rpc-Breaker': rpcBreaker.state() } },
+    });
+  } catch {
+    rpcBreaker.recordFailure();
+    // No error detail: fetch failures can describe the upstream endpoint.
+    return NextResponse.json(
+      { error: { code: -32603, message: 'Upstream RPC fetch failed' } },
+      { status: 502, headers: { 'X-Rpc-Breaker': rpcBreaker.state(), 'Cache-Control': 'no-store' } },
     );
   }
 }
 
-export async function POST(request: NextRequest) {
-  // Read the body as a buffer to safely forward without re-encoding.
-  const body = await request.arrayBuffer();
-  return passthrough(request, body);
-}
-
-export async function GET(request: NextRequest) {
-  // Some clients use GET for cluster info / health checks. Forward without body.
-  return passthrough(request, null);
-}
-
-export async function OPTIONS() {
-  // Pre-flight isn't strictly needed (same-origin) but answer it cleanly so
-  // any browser that probes gets a 204 instead of a method-not-allowed.
-  return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
-}
+// JSON-RPC is POST-only. No GET passthrough and no CORS pre-flight answer:
+// cross-origin callers are not supported, so a pre-flight simply fails.

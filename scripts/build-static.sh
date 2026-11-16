@@ -6,6 +6,30 @@
 # moved aside for the build and restored afterward.
 set -euo pipefail
 
+# Everything in NEXT_PUBLIC_* is inlined into the exported JavaScript, and a
+# static export is uploaded to a public host. Refuse to build if any of those
+# values carries a provider credential, so a key left in .env.local for local
+# testing cannot end up in ./out. Set ALLOW_PUBLIC_RPC_KEY=1 only for a key that
+# is meant to be public (locked to your domain in the provider dashboard).
+if [ "${ALLOW_PUBLIC_RPC_KEY:-}" != "1" ]; then
+  leaked="$(node -e '
+    const { loadEnvConfig } = require("@next/env");
+    loadEnvConfig(process.cwd(), false, { info() {}, error() {} });
+    const bad = /api[-_]?key=[^&\s]|[?&](token|key|apikey)=[^&\s]|\/\/[^\/\s:@]+:[^\/\s@]+@/i;
+    const hits = Object.keys(process.env)
+      .filter((k) => k.startsWith("NEXT_PUBLIC_") && bad.test(process.env[k] || ""))
+      .concat(["NEXT_PUBLIC_HELIUS_API_KEY", "NEXT_PUBLIC_TEE_API_KEY"].filter((k) => process.env[k]));
+    process.stdout.write([...new Set(hits)].join(" "));
+  ')"
+  if [ -n "$leaked" ]; then
+    echo "build:static refused: these public env vars contain a credential that would be" >&2
+    echo "published in ./out:  $leaked" >&2
+    echo "Blank them (static builds let users bring their own RPC), or re-run with" >&2
+    echo "ALLOW_PUBLIC_RPC_KEY=1 if the key is domain-restricted and meant to be public." >&2
+    exit 1
+  fi
+fi
+
 API_STASH=".api-stash-$$"
 PROFILE_DYNAMIC_STASH=".profile-dynamic-stash-$$"
 cleanup() {

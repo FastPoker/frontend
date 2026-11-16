@@ -21,12 +21,14 @@
  *   Client:  NEXT_PUBLIC_L1_WS_URL=wss://<provider>/?api-key=KEY
  *
  * The browser cannot websocket-subscribe through the HTTP-only `/rpc` proxy.
- * If `NEXT_PUBLIC_L1_RPC_URL=/rpc`, configure `NEXT_PUBLIC_L1_WS_URL` or the
- * legacy public Helius key fallback below.
+ * `NEXT_PUBLIC_L1_WS_URL` is inlined into browser JS, so whatever key it
+ * carries is PUBLIC: use a separate key locked to your domain in the provider
+ * dashboard, never the server-side `L1_RPC` key. Leave it blank to poll.
  *
  * Backward compatibility:
- *   The HELIUS_BASE_URL + HELIUS_API_KEY fallback exists for deployments that
- *   still set just an API key. New deployments should use the full URL above.
+ *   The server-only HELIUS_BASE_URL + HELIUS_API_KEY fallback exists for
+ *   deployments that still set just an API key. New deployments should use the
+ *   full URL above.
  */
 
 function buildFromKey(base: string, key: string): string {
@@ -70,18 +72,6 @@ function isSameOriginRpcProxy(raw: string): boolean {
   }
 }
 
-function heliusWsFromPublicEnv(): string {
-  const key = process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
-  if (!key) return '';
-
-  const base = process.env.NEXT_PUBLIC_HELIUS_BASE_URL || '';
-  if (base) return rpcToWsUrl(buildFromKey(base, key));
-
-  const cluster = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER || '').toLowerCase();
-  const host = cluster.startsWith('mainnet') ? 'mainnet.helius-rpc.com' : 'devnet.helius-rpc.com';
-  return `wss://${host}/?api-key=${key}`;
-}
-
 // --- Client-safe export ---------------------------------------------------
 // IMPORTANT: only read `NEXT_PUBLIC_L1_RPC_URL` here. Next.js inlines every
 // `process.env.NEXT_PUBLIC_*` reference at build time, so reading the legacy
@@ -106,8 +96,11 @@ export function getClientL1WsRpc(): string {
   const explicit = rpcToWsUrl(PUBLIC_L1_WS_URL);
   if (explicit) return explicit;
 
+  // The `/rpc` proxy is HTTP-only. Without an explicit WS URL there is no
+  // websocket endpoint — callers fall back to polling. Never derive one from a
+  // provider key here: anything this module reads from NEXT_PUBLIC_* is public.
   const rpc = getClientL1Rpc();
-  if (isSameOriginRpcProxy(rpc)) return heliusWsFromPublicEnv();
+  if (isSameOriginRpcProxy(rpc)) return '';
   return rpcToWsUrl(rpc);
 }
 
@@ -143,8 +136,9 @@ export function getL1Rpc(): string {
   if (pub && !pub.startsWith('/')) return pub;
 
   // Backward-compat: build from key + base if both are set.
-  const base = process.env.HELIUS_BASE_URL || process.env.NEXT_PUBLIC_HELIUS_BASE_URL || '';
-  const key = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
+  // Server-only names: a NEXT_PUBLIC_* key would be inlined into browser JS.
+  const base = process.env.HELIUS_BASE_URL || '';
+  const key = process.env.HELIUS_API_KEY || '';
   const constructed = buildFromKey(base, key);
   if (constructed) return constructed;
 

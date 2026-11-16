@@ -94,8 +94,24 @@ APP_ORIGIN=https://your-public-origin.example
 `NEXT_PUBLIC_L1_RPC_URL=/rpc` tells the browser to use your same-origin Next route
 as an HTTP Solana RPC proxy. The real provider URL stays in server-side `L1_RPC`,
 so normal visitors do not need their own RPC and your provider key is not baked
-into browser JavaScript. `NEXT_PUBLIC_L1_WS_URL` still needs to be a browser-reachable
-WebSocket endpoint because `/rpc` is HTTP-only.
+into browser JavaScript.
+
+`/rpc` is HTTP-only, so `NEXT_PUBLIC_L1_WS_URL` is a separate, optional
+browser-reachable WebSocket endpoint (leave it blank and the app polls). Anything
+in a `NEXT_PUBLIC_*` variable is public: if that URL carries a provider key, use
+a second key restricted to your domain in the provider dashboard, not the
+`L1_RPC` key.
+
+The `/rpc` proxy is not an open RPC endpoint. It only answers same-origin browser
+requests (`Origin` must be the site itself, `APP_ORIGIN`, or
+`RPC_PROXY_ALLOWED_ORIGINS`), only the JSON-RPC methods this frontend uses,
+`getProgramAccounts` only against this app's programs, and only within per-IP and
+global per-minute budgets (`RPC_PROXY_*` in `.env.example`). Header checks stop
+other websites and casual scripts but can be forged by a custom client, so the
+budgets are what bound your spend: size `RPC_PROXY_GLOBAL_CREDITS_PER_MIN` to
+your plan, set `RPC_PROXY_TRUSTED_HOPS` / `RPC_PROXY_CLIENT_IP_HEADER` to match
+your proxy chain, and on multi-instance hosting add a rate-limit rule at your
+CDN/WAF because the built-in budgets are per process.
 
 The operator keypair is used only for protocol helper transactions and TEE helper
 auth. It never signs as a player wallet. Never commit `.env.local` or keypair JSON.
